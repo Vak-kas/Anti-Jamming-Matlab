@@ -11,12 +11,19 @@ f_end = 29.5 * GHz; %29.5GHz
 
 T = 10; %timeSlot
 
+power = 10;
+
 
 
 %% 실험 환경 구성
 
 % 채널 생성
-channels = f_start + (0:N-1) * BW_ch;
+channels = cell(1, N);
+for i = 1:N
+    centerFreq = f_start + (i-1) * BW_ch;
+    channels{i} = Channel(i, centerFreq, BW_ch);
+end
+
 
 %Transmitter & Receiver 생성
 tx = Node(1, @sharedRandomFHP);
@@ -27,33 +34,42 @@ rx = Node(2, @sharedRandomFHP);
 for slot = 1:T
     fprintf("\n========== SLOT %d ==========\n", slot);
     
+    %% TX 데이터 준비
     % Tx DATA 생성
     payload = sprintf("DATA_SLOT_%d", slot);
     tx.createDataPacket(rx.id, payload);
 
-    % Tx 버퍼에서 패킷 꺼내기
-    pkt = tx.popTxPacket();
+
+    %% 채널 선택
+    txChannel = tx.selectChannel(slot, channels);
+    rxChannel = rx.selectChannel(slot, channels);
+    fprintf("TX Channel: %d | RX Channel: %d\n", txChannel.id, rxChannel.id);
 
 
-    % 채널 선택
-    txChannel = tx.selectChannel(slot, N);
-    rxChannel = rx.selectChannel(slot, N);
-    fprintf("TX Channel: %d | RX Channel: %d\n", txChannel, rxChannel );
+
+    %% 재머
+
+    
+    %% 채널을 통해서 데이터 송신
+    tx.sendPacket(txChannel, power);
 
 
-    % 채널을 통해서 데이터 송신
+    %% RX 데이터 수신
+    if txChannel.id == rxChannel.id
+        rx.receivePacket();
 
-    % RX 수신
-    if txChannel == rxChannel
-        rx.receivePack(pkt, txChannel);
-        
-        % RX가 ACK/NACK 생성했는지 확인
-        feedbackPkt = rx.popTxPacket();
-        if ~isempty(feedbackPkt)
-            fprintf("RX -> TX Feedback : %s\n", string(feedbackPkt.type));
-            % TX가 ACK/NACK 수신
-            tx.receivePack(feedbackPkt, txChannel);
+
+        %ACK/NACK Phase
+        txChannel.reset();
+        feedback = rx.sendPacket(rxChannel, power);
+
+        if ~isempty(feedback)
+            fprintf("RX -> TX Feedback: %s\n", string(feedback.type));
+        else
+            fprintf("RX -> TX Feedback: NONE\n");
         end
+        
+       
     else
         fprintf("-> [실패] 송수신 채널 불일치 (동기 이탈)\n");
     end
