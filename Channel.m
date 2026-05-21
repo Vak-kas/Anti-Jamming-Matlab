@@ -27,7 +27,7 @@ classdef Channel < handle
         end
 
         %========== Signal 가져오기 ==========
-        function signals = getSignal(obj)
+        function signals = getSignals(obj)
             signals = obj.signals;
         end
 
