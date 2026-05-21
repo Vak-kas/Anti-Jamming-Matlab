@@ -14,7 +14,8 @@ f_end = 29.5 * GHz; %29.5GHz
 
 T = 10; %timeSlot
 
-power = 10;
+power = 10; %송신 전력
+jammerPower = 10; %재머 파워
 
 
 
@@ -31,6 +32,8 @@ end
 tx = Node(1, @sharedRandomFHP);
 rx = Node(2, @sharedRandomFHP);
 
+% Jammer 생성
+jammer = Jammer(999, @randomFHP);
 
 %% 시뮬레이션
 for slot = 1:T
@@ -45,17 +48,21 @@ for slot = 1:T
     %% 채널 선택
     txChannel = tx.selectChannel(slot, channels);
     rxChannel = rx.selectChannel(slot, channels);
+    jamChannel = jammer.selectChannel(slot, channels);
     fprintf("TX Channel: %d | RX Channel: %d\n", txChannel.id, rxChannel.id);
+    fprintf("Jammer Channel: %d\n", jamChannel.id);
 
 
 
-    %% 재머
+
 
 
     %% 채널을 통해서 데이터 송신
-    tx.sendPacket(txChannel, power);
+    tx.sendPacket(power);
 
 
+    %% 재밍
+    jammer.jam(jammerPower);
     %% RX 데이터 수신
     if txChannel.id == rxChannel.id
         rx.receivePacket();
@@ -63,7 +70,7 @@ for slot = 1:T
 
         %ACK/NACK Phase
         txChannel.reset();
-        rx.sendPacket(rxChannel, power);
+        rx.sendPacket(power);
     else
         fprintf("-> [실패] 송수신 채널 불일치 (동기 이탈)\n");
     end
@@ -76,15 +83,8 @@ for slot = 1:T
         fprintf("RX -> TX Feedback: NONE\n");
     end
 
-    % %% 재머 설정
-    % jammerPower = 5; % 재머 전력 설정
-    % jammerChannel = randi(N); % 랜덤으로 재머 채널 선택
-    % fprintf("Jammer Channel: %d\n", jammerChannel);
-    % 
-    % % 재머 데이터 송신
-    % tx.sendPacket(channels{jammerChannel}, jammerPower);
-
-
+    
+    clearChannel(channels, N);
 
 end
 
@@ -106,4 +106,16 @@ function ch = sharedRandomFHP(slot, N)
     global masterSeed;
     rng(masterSeed + slot) %각 노드의 채널 선택 같게 해줌
     ch = randi(N);
+end
+
+function ch = randomFHP(slot, N)
+    ch = randi(N);
+end
+
+
+
+function clearChannel(channels, N)
+    for i = 1:N 
+        channels{i}.reset();
+    end
 end
