@@ -7,7 +7,7 @@ MHz = 1e6;
 GHz = 1e9;
 
 %% 초기 환경 변수
-N = 60; %채널 개수
+N = 10; %채널 개수
 BW_ch = 50 * MHz; %channel bandwidth = 50 MHz
 f_start = 26.5 * GHz; %26.5GHz
 f_end = 29.5 * GHz; %29.5GHz
@@ -63,18 +63,27 @@ for slot = 1:T
 
         %ACK/NACK Phase
         txChannel.reset();
-        feedback = rx.sendPacket(rxChannel, power);
-
-        if ~isempty(feedback)
-            fprintf("RX -> TX Feedback: %s\n", string(feedback.type));
-        else
-            fprintf("RX -> TX Feedback: NONE\n");
-        end
-        
-       
+        rx.sendPacket(rxChannel, power);
     else
         fprintf("-> [실패] 송수신 채널 불일치 (동기 이탈)\n");
     end
+
+    feedback = tx.receivePacket();
+    rxChannel.reset();
+    if ~isempty(feedback)
+        fprintf("RX -> TX Feedback: %s\n", string(feedback.type));
+    else
+        fprintf("RX -> TX Feedback: NONE\n");
+    end
+
+    % %% 재머 설정
+    % jammerPower = 5; % 재머 전력 설정
+    % jammerChannel = randi(N); % 랜덤으로 재머 채널 선택
+    % fprintf("Jammer Channel: %d\n", jammerChannel);
+    % 
+    % % 재머 데이터 송신
+    % tx.sendPacket(channels{jammerChannel}, jammerPower);
+
 
 
 end
@@ -98,4 +107,3 @@ function ch = sharedRandomFHP(slot, N)
     rng(masterSeed + slot) %각 노드의 채널 선택 같게 해줌
     ch = randi(N);
 end
-
