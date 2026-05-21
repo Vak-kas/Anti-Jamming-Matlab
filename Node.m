@@ -55,7 +55,7 @@ classdef Node < handle
                 return;
             end
 
-            sig = Signal(pkt, power, obj.id, channel.id);
+            sig = Signal(SignalType.COMM, pkt, power, obj.id, channel.id);
             channel.addSignal(sig);
         end
 

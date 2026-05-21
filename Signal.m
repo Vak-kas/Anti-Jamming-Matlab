@@ -1,5 +1,6 @@
 classdef Signal
     properties
+        type
         packet
         txPower
 
@@ -9,7 +10,8 @@ classdef Signal
 
     methods
         %========== Signal 생성자 ==========
-        function obj = Signal(packet, txPower, txNodeId, txChannelId)
+        function obj = Signal(type, packet, txPower, txNodeId, txChannelId)
+            obj.type = type;
             obj.packet = packet;
             obj.txPower = txPower;
             obj.txNodeId = txNodeId;
