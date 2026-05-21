@@ -49,7 +49,8 @@ classdef Node < handle
         end
 
         %========== 패킷 송신 ==========
-        function pkt = sendPacket(obj, channel, power)
+        function pkt = sendPacket(obj, power)
+            channel = obj.currentChannel;
             pkt = obj.popTxPacket();
             if isempty(pkt)
                 return;
