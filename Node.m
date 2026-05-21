@@ -46,6 +46,17 @@ classdef Node < handle
             obj.txBuffer(1) = [];
         end
 
+        %========== 패킷 송신 ==========
+        function sendPacket(obj, channel, power)
+            pkt = obj.popTxPacket();
+            if isempty(pkt)
+                return;
+            end
+
+            sig = Signal(pkt, power);
+            channel.addSignal(sig);
+        end
+
 
         %========== 패킷 수신(ACK/NACK return) ==========
         %채널 수신한 후에 응답
