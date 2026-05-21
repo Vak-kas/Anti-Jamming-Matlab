@@ -1,5 +1,8 @@
 clc;
 clear;
+global masterSeed;
+rng('shuffle')
+masterSeed = randi(10000);
 MHz = 1e6;
 GHz = 1e9;
 
@@ -16,7 +19,6 @@ power = 10;
 
 
 %% 실험 환경 구성
-
 % 채널 생성
 channels = cell(1, N);
 for i = 1:N
@@ -49,7 +51,7 @@ for slot = 1:T
 
     %% 재머
 
-    
+
     %% 채널을 통해서 데이터 송신
     tx.sendPacket(txChannel, power);
 
@@ -92,7 +94,8 @@ function ch = fixedFHP(slot, N)
 end
 
 function ch = sharedRandomFHP(slot, N)
-    rng(slot) %각 노드의 채널 선택 같게 해줌
+    global masterSeed;
+    rng(masterSeed + slot) %각 노드의 채널 선택 같게 해줌
     ch = randi(N);
 end
 
