@@ -17,16 +17,18 @@ classdef Node < handle
             obj.id = id;
             obj.FHP = FHP;
 
-            obj.currentChannel = -1;
+            obj.currentChannel = {};
             obj.txBuffer = {};
             obj.rxBuffer = {};
         end
 
 
         %========== 채널 선택 ==========
-        function ch = selectChannel(obj, slot, N)
-            ch = obj.FHP(slot, N);
-            obj.currentChannel = ch;
+        function ch = selectChannel(obj, slot, channels)
+            N = length(channels);
+            channelId = obj.FHP(slot, N);
+            obj.currentChannel = channels{channelId};
+            ch = obj.currentChannel;
         end
 
         %========== 데이터 패킷 생성 ==========
@@ -47,7 +49,7 @@ classdef Node < handle
         end
 
         %========== 패킷 송신 ==========
-        function sendPacket(obj, channel, power)
+        function pkt = sendPacket(obj, channel, power)
             pkt = obj.popTxPacket();
             if isempty(pkt)
                 return;
@@ -60,29 +62,41 @@ classdef Node < handle
 
         %========== 패킷 수신(ACK/NACK return) ==========
         %채널 수신한 후에 응답
-        function receivePack(obj, pkt, txChannel)
-            if isempty(pkt)
+        function pkt = receivePacket(obj)
+            pkt = [];
+            signals = obj.currentChannel.getSignals();
+
+            if isempty(signals)
                 return;
             end
 
-            %패킷 수신 정상적
-            if obj.currentChannel == txChannel && obj.id == pkt.dstId
-                obj.rxBuffer{end+1} = pkt; %수신한 패킷 저장
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%임시 시그널 처리 --> 2개 이상이면 간섭 발생했다라는 가정%%%%%%
+            sig = signals{1};
+            pkt = sig.packet;
 
-                if pkt.type == PacketType.DATA
-                    ackPkt = Packet(PacketType.ACK, obj.id, pkt.srcId, "ACK");
-                    obj.txBuffer{end+1} = ackPkt;
-                end
-                
-            %패킷 수신 X
+
+            % 신호가 2개 이상인 경우
+            if length(signals) > 1
+                nackPkt = Packet(PacketType.NACK, obj.id, pkt.srcId, "NACK");
+                obj.txBuffer{end+1} = nackPkt;
+
+
+            % 신호가 1개인 경우(충돌 없음) 
             else
-                if pkt.type == PacketType.DATA
-                    nackPkt = Packet(PacketType.NACK, obj.id, pkt.srcId, "NACK");
-                    obj.txBuffer{end+1} = nackPkt;
+                if pkt.dstId == obj.id
+                    obj.rxBuffer{end+1} = pkt;
+    
+                    if pkt.type == PacketType.DATA
+                        ackPkt = Packet(PacketType.ACK, obj.id, pkt.srcId, "ACK");
+                        obj.txBuffer{end+1} = ackPkt;
+                    end
                 end
             end
-        end
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        end
 
     end
 
