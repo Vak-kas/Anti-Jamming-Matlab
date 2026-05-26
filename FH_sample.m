@@ -21,12 +21,7 @@ jammerPower = 10; %재머 파워
 
 %% 실험 환경 구성
 % 채널 생성
-channels = cell(1, N);
-for i = 1:N
-    centerFreq = f_start + (i-1) * BW_ch;
-    channels{i} = Channel(i, centerFreq, BW_ch);
-end
-
+channels = createChannels(N, BW_ch, f_start);
 
 %Transmitter & Receiver 생성
 tx = Node(1, @sharedRandomFHP);
@@ -97,7 +92,7 @@ end
 
 
 
-%% function
+%% Strategy
 function ch = fixedFHP(slot, N)
     ch  = 1;
 end
@@ -114,6 +109,17 @@ end
 
 
 
+%% function
+% 채널 생성
+function channels = createChannels(N, BW_ch, f_start)
+    channels = cell(1, N);
+    for i = 1:N
+        centerFreq = f_start + (i-1) * BW_ch;
+        channels{i} = Channel(i, centerFreq, BW_ch);
+    end
+end
+
+% 채널 초기화
 function clearChannel(channels, N)
     for i = 1:N 
         channels{i}.reset();
