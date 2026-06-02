@@ -32,11 +32,26 @@ classdef Channel < handle
         end
 
 
-        %========== SINR 계산하기 ==========
-        function sinr = computeSINR(obj, a, b)
-            sinr = 0;
-        end
+        %========== Channel의 시그널 상태 확인하기 ==========
+        function printSignals(obj)
+            fprintf("\n[Channel %d] Signal Count = %d\n", obj.id, length(obj.signals));
 
+            if isempty(obj.signals)
+                fprintf("  Empty\n");
+                return;
+            end
+        
+            for i = 1:length(obj.signals)
+                sig = obj.signals{i};
+                fprintf("  Signal %d | Type=%s | TxNode=%d | Power=%.2f",i, string(sig.type), sig.txNodeId, sig.txPower);
+        
+                if ~isempty(sig.packet)
+                    fprintf(" | Packet=%s | Src=%d -> Dst=%d", string(sig.packet.type), sig.packet.srcId, sig.packet.dstId);
+                end
+        
+                fprintf("\n");
+            end
+        end
 
 
     end
