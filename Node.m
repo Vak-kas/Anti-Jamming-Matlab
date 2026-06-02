@@ -32,7 +32,7 @@ classdef Node < handle
             obj.txPower = txPower;
             obj.FHP = FHP;
 
-            obj.currentChannel = {};
+            obj.currentChannel = [];
             obj.txBuffer = {};
             obj.rxBuffer = {};
         end
@@ -78,9 +78,15 @@ classdef Node < handle
 
         %========== 패킷 수신(ACK/NACK return) ==========
         function pkt = receivedPacket(obj, channels, betaThreshold, mu, noisePower)
+            pkt = [];
+
             for i = 1 : length(channels)
                 channel = channels{i};
                 signals = channel.getSignals();
+
+                if isempty(signals)
+                    continue;
+                end
 
                 for j = 1:length(signals)
                     sig = signals{j};
@@ -97,9 +103,16 @@ classdef Node < handle
                         continue;
                     end
 
-                    sinr = channel.computeSINR(mu, noisePower);
-
                     pkt = sig.packet;
+                    if pkt.type ~= PacketType.DATA
+                        % TODO
+                        % ACK/NACK인지 (Tx 전용 처리)
+                        continue;
+                    end
+
+                    sinr = obj.computeSINR(mu, noisePower);
+
+                    
 
                     if sinr > betaThreshold
                         obj.rxBuffer{end+1} = pkt;
@@ -107,13 +120,13 @@ classdef Node < handle
                         if pkt.type==PacketType.DATA
                             ackPkt = Packet(PacketType.ACK, obj.id, pkt.srcId, "ACK");
                             obj.txBuffer{end+1} = ackPkt; 
-                            % ACK는 DATA가 온 동일 채널로 보낸다.
+                            % DATA가 온 동일 채널로
                             obj.currentChannel = channel;
                         end
                     else
                         nackPkt = Packet(PacketType.NACK, obj.id, pkt.srcId, "NACK");
                         obj.txBuffer{end+1} = nackPkt;
-                        % NACK도 동일 채널로 보낸다고 단순화 가능
+                        % DATA가 온 동일 채널로
                         obj.currentChannel = channel;
                     end
 
@@ -122,6 +135,13 @@ classdef Node < handle
 
             end
         end
+    
+
+        % ========== SINR 계산 ==========
+        function sinr = computeSINR(obj, mu, noisePower)
+            sinr = 1;
+        end
+
     end
 
 end
