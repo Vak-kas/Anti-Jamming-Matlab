@@ -32,6 +32,12 @@ classdef Channel < handle
         end
 
 
+        %========== SINR 계산하기 ==========
+        function sinr = computeSINR(obj, a, b)
+            sinr = 0;
+        end
+
+
 
     end
 
