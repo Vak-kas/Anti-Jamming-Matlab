@@ -71,24 +71,29 @@ end
 
 %% 그래프
 
-figure;
+figure('Color','w','Position',[100 100 900 600]);
 
-semilogy(jamHopList, error_random, '-bo', 'LineWidth', 1.5);
+semilogy(jamHopList,error_random,'-o','LineWidth',2.5,'MarkerSize',10,'MarkerFaceColor','w','Color',[0 0.2 0.9],'DisplayName','Shared Random FHP');
 hold on;
 
-semilogy(jamHopList, error_fixed, '-rs', 'LineWidth', 1.5);
+semilogy(jamHopList,error_fixed,'-s','LineWidth',2.5,'MarkerSize',10,'MarkerFaceColor','w','Color',[0.9 0 0],'DisplayName','Fixed FHP');
 
 grid on;
+box on;
 
-xlabel('Number of Jammed Channels per Slot');
-ylabel('Error Rate');
+xlabel('Number of Jammed Channels per Slot (N = 32)','FontSize',16,'FontWeight','bold');
+ylabel('Packet Error Rate','FontSize',16,'FontWeight','bold');
 
-title('Error Rate vs Number of Jammed Channels');
+title('Impact of Jammed Channels on Packet Error Rate','FontSize',18,'FontWeight','bold');
 
-legend( ...
-    'sharedRandomFHP', ...
-    'fixedFHP', ...
-    'Location', 'northwest');
+legend('Location','northwest','FontSize',14,'Box','on');
+
+set(gca,'FontSize',14,'LineWidth',1.3,'YMinorGrid','on','XMinorGrid','off');
+
+xlim([0.5 16.5]);
+ylim([1e-2 1]);
+
+xticks(jamHopList);
 
 %% =========================
 %% Functions
