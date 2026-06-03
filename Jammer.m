@@ -46,7 +46,6 @@ classdef Jammer < Node
             ch = obj.currentChannels;
         end
 
-
         %========== 재밍 공격 ==========
         function jam(obj, power)
             if nargin < 2 || isempty(power)
@@ -55,7 +54,17 @@ classdef Jammer < Node
 
             for i = 1:length(obj.currentChannels)
                 channel = obj.currentChannels{i};
-                sig = Signal(SignalType.JAMMING, [], power, obj.id, channel.id, obj.position);
+
+                sig = Signal( ...
+                    SignalType.JAMMING, ...
+                    [], ...
+                    power, ...
+                    obj.id, ...
+                    obj.role, ...
+                    channel.id, ...
+                    obj.position ...
+                );
+
                 channel.addSignal(sig);
             end
         end
