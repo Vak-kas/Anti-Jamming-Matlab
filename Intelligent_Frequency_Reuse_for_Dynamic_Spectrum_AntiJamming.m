@@ -17,18 +17,19 @@ f_end = 29.5 * GHz; %29.5GHz
 
 %% 핵심 파라미터
 power = 1;
-jammerPower = 100000;
+jammerPower = 10000000;
 
 pathLossExponent = 3;
 
 thermalNoise_W = 1.38e-23 * 290 * BW_ch;
 thermalNoise = thermalNoise_W * 1000;   % W -> mW
 
-betaThreshold_dB = 10;
+betaThreshold_dB = 8;
 betaThreshold = 10^(betaThreshold_dB / 10);
 
 %% initialize
 channels = createChannels(K, BW_ch, f_start); %채널 생성
+channelModel = ChannelModel(pathLossExponent);
 [txNodes, rxNodes] = createNodes(N, area, power, @randomFHP, pairDistance);% tx, rx노드 생성
 jammer = Jammer(1001, @combJammerFHP, [1250, 1250, 0], jammerPower);
 clearChannel(channels);
@@ -41,6 +42,7 @@ NCT = zeros(1, T);
 for slot = 1:T
     fprintf("==========Slot %d==========\n" , slot);
     clearChannel(channels);
+    channelModel.update(txNodes, rxNodes, jammer);
     success = zeros(N, 1);
 
     %% TDEC (TODO)
@@ -80,7 +82,7 @@ for slot = 1:T
 
     %% Rx가 데이터 수신 및 ACK/NACK 생성
     for n = 1:N
-        rxNodes{n}.receivedPacket(channels, betaThreshold, pathLossExponent, thermalNoise);
+        rxNodes{n}.receivedPacket(channels, betaThreshold, thermalNoise, channelModel);
         % fprintf("Rx %d received packet from Tx %d\n", rxNodes{n}.id, txNodes{n}.id);
     end
 
@@ -97,8 +99,7 @@ for slot = 1:T
     %% Tx가 Ack/Nack 수신
     fprintf("==========\n");
     for n = 1:N
-        success(n) = txNodes{n}.receiveAck(betaThreshold, pathLossExponent, thermalNoise);
-
+        success(n) = txNodes{n}.receiveAck(betaThreshold, thermalNoise, channelModel);
         if(success(n) == 1)
             fprintf("Tx %d received ACK\n", txNodes{n}.id);
         else
