@@ -9,15 +9,23 @@ K = 10; % Number of Channel
 T = 1; % Time Slot
 area = [2500, 2500, 0]; %전체 범위
 pairDistance = 50; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
-power = 10;
-jammerPower = 10000;
 
 BW_ch = 50 * MHz; %channel bandwidth = 50 MHz
 f_start = 26.5 * GHz; %26.5GHz
 f_end = 29.5 * GHz; %29.5GHz
 
 
-betaThreshold = 0; %QoS Threshold(SINR 임계값)
+%% 핵심 파라미터
+power = 1;
+jammerPower = 100000;
+
+pathLossExponent = 3;
+
+thermalNoise_W = 1.38e-23 * 290 * BW_ch;
+thermalNoise = thermalNoise_W * 1000;   % W -> mW
+
+betaThreshold_dB = 10;
+betaThreshold = 10^(betaThreshold_dB / 10);
 
 %% initialize
 channels = createChannels(K, BW_ch, f_start); %채널 생성
@@ -40,7 +48,7 @@ for slot = 1:T
     %% Tx가 채널 선택
     for n = 1:N
         txNodes{n}.selectChannel(slot, channels);
-        fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
+        % fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
     end
 
     %% Tx가 보낼 Data 생성
@@ -55,18 +63,29 @@ for slot = 1:T
     end
 
     %% Jammer Signal 추가
+    jammer.selectChannel(slot, channels);
+    jammer.jam();
+
+    fprintf("Jammer %d -> ", jammer.id);
+    for j = 1:length(jammer.currentChannels)
+        fprintf("Channel %d ", jammer.currentChannels{j}.id);
+    end
+    fprintf("\n");
 
 
     %% 전체 채널의 Signal 정보 확인
     for channel = 1:K
-        channels{channel}.printSignals();
+        % channels{channel}.printSignals();
     end
 
     %% Rx가 데이터 수신 및 ACK/NACK 생성
     for n = 1:N
-        rxNodes{n}.receivedPacket(channels, betaThreshold, 0, 0); %TODO : mu, NoisePower, Th 설정
+        rxNodes{n}.receivedPacket(channels, betaThreshold, pathLossExponent, thermalNoise);
         % fprintf("Rx %d received packet from Tx %d\n", rxNodes{n}.id, txNodes{n}.id);
     end
+
+    % DATA phase 종료: DATA 신호 제거, JAMMING은 유지
+    clearCommSignals(channels);
 
     %% Rx가 ACK/NACK 송신
     for n = 1:N
@@ -76,8 +95,9 @@ for slot = 1:T
 
 
     %% Tx가 Ack/Nack 수신
+    fprintf("==========\n");
     for n = 1:N
-        success(n) = txNodes{n}.receiveAck();
+        success(n) = txNodes{n}.receiveAck(betaThreshold, pathLossExponent, thermalNoise);
 
         if(success(n) == 1)
             fprintf("Tx %d received ACK\n", txNodes{n}.id);
@@ -89,7 +109,51 @@ for slot = 1:T
 
     %% 마무리
     NCT(slot) = mean(success);
+    fprintf("\n========== Slot %d Summary ==========\n", slot);
     fprintf("NCT = %.3f\n", NCT(slot));
+
+    % 재밍된 채널 정보 출력
+    fprintf("\n[Jammed Channels]\n");
+
+    for j = 1:length(jammer.currentChannels)
+        jamCh = jammer.currentChannels{j};
+        fprintf("Jammed Channel %d\n", jamCh.id);
+
+        for n = 1:N
+            if txNodes{n}.currentChannel.id == jamCh.id
+                if success(n) == 1
+                    resultText = "ACK";
+                else
+                    resultText = "NACK or No ACK";
+                end
+
+                fprintf("  Tx %d -> Rx %d | Result: %s\n", ...
+                    txNodes{n}.id, rxNodes{n}.id, resultText);
+            end
+        end
+    end
+
+    % 실패한 노드 전체 정보 출력
+    fprintf("\n[Failed Users]\n");
+
+    failedCount = 0;
+
+    for n = 1:N
+        if success(n) == 0
+            failedCount = failedCount + 1;
+
+            fprintf("  Tx %d -> Rx %d | Channel %d\n", ...
+                txNodes{n}.id, ...
+                rxNodes{n}.id, ...
+                txNodes{n}.currentChannel.id);
+        end
+    end
+
+    if failedCount == 0
+        fprintf("  None\n");
+    end
+
+    fprintf("=====================================\n");
 
 end
 
@@ -128,6 +192,13 @@ end
 function clearChannel(channels)
     for i = 1:length(channels)
         channels{i}.reset();
+    end
+end
+
+% 정상 신호 제거
+function clearCommSignals(channels)
+    for i = 1:length(channels)
+        channels{i}.removeCommSignals();
     end
 end
 

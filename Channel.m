@@ -53,6 +53,20 @@ classdef Channel < handle
             end
         end
 
+        function removeCommSignals(obj)
+            newSignals = {};
+        
+            for i = 1:length(obj.signals)
+                sig = obj.signals{i};
+        
+                if sig.type == SignalType.JAMMING
+                    newSignals{end+1} = sig;
+                end
+            end
+
+            obj.signals = newSignals;
+        end
+
 
     end
 
