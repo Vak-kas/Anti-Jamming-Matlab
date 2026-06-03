@@ -17,23 +17,29 @@ f_start = 26.5 * GHz; %26.5GHz
 f_end = 29.5 * GHz; %29.5GHz
 
 
+betaThreshold = 0; %QoS Threshold(SINR 임계값)
+
 %% initialize
 channels = createChannels(K, BW_ch, f_start); %채널 생성
 [txNodes, rxNodes] = createNodes(N, area, power, @randomFHP, pairDistance);% tx, rx노드 생성
 jammer = Jammer(1001, @combJammerFHP, [1250, 1250, 0], jammerPower);
 clearChannel(channels);
 
+NCT = zeros(1, T);
+
+
 
 %% Simulation Start
 for slot = 1:T
     fprintf("==========Slot %d==========\n" , slot);
     clearChannel(channels);
+    success = zeros(N, 1);
 
     %% TDEC (TODO)
 
     %% Tx가 채널 선택
     for n = 1:N
-        txNodes{n}.selectChannel(K, channels);
+        txNodes{n}.selectChannel(slot, channels);
         fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
     end
 
@@ -56,23 +62,34 @@ for slot = 1:T
         channels{channel}.printSignals();
     end
 
-    %% Rx가 데이터 수신 및 ACK/NACK 전송
+    %% Rx가 데이터 수신 및 ACK/NACK 생성
     for n = 1:N
-        rxNodes{n}.receivedPacket(channels, 0, 0, 0); %TODO : mu, NoisePower, Th 설정
+        rxNodes{n}.receivedPacket(channels, betaThreshold, 0, 0); %TODO : mu, NoisePower, Th 설정
         % fprintf("Rx %d received packet from Tx %d\n", rxNodes{n}.id, txNodes{n}.id);
+    end
+
+    %% Rx가 ACK/NACK 송신
+    for n = 1:N
+        rxNodes{n}.sendPacket();
+        % fprintf("Rx %d send packet to Tx %d\n", rxNodes{n}.id, txNodes{n}.id);
     end
 
 
     %% Tx가 Ack/Nack 수신
     for n = 1:N
-    
-        if ~isempty(rxNodes{n}.txBuffer)
-            pkt = rxNodes{n}.txBuffer{1};
-            fprintf("RX %d -> %s\n", rxNodes{n}.id, string(pkt.type));
+        success(n) = txNodes{n}.receiveAck();
+
+        if(success(n) == 1)
+            fprintf("Tx %d received ACK\n", txNodes{n}.id);
+        else
+            fprintf("Tx %d received NACK or no ACK\n", txNodes{n}.id);
         end
     end
+    
 
     %% 마무리
+    NCT(slot) = mean(success);
+    fprintf("NCT = %.3f\n", NCT(slot));
 
 end
 
