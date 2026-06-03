@@ -135,6 +135,50 @@ classdef Node < handle
 
             end
         end
+
+        % ========== ACK/NACK 수신 ==========
+        function success = receiveAck(obj)
+            success = false;
+
+            if isempty(obj.currentChannel)
+                return;
+            end
+
+            signals = obj.currentChannel.getSignals();
+
+            if isempty(signals)
+                return;
+            end
+
+            for i = 1:length(signals)
+                sig = signals{i};
+
+                if sig.type ~= SignalType.COMM
+                    continue;
+                end
+
+                if isempty(sig.packet)
+                    continue;
+                end
+
+                pkt = sig.packet;
+                if pkt.dstId ~= obj.id
+                    continue;
+                end
+        
+                if pkt.type == PacketType.ACK
+                    obj.rxBuffer{end+1} = pkt;
+                    success = true;
+                    return;
+        
+                elseif pkt.type == PacketType.NACK
+                    obj.rxBuffer{end+1} = pkt;
+                    success = false;
+                    return;
+                end  
+            end
+
+        end
     
 
         % ========== SINR 계산 ==========
