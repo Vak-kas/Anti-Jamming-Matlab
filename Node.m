@@ -36,6 +36,17 @@ classdef Node < handle
             ch = obj.currentChannel;
         end
 
+        %========== 채널 ID로 직접 설정 ==========
+        function ch = setChannelById(obj, channelId, channels)
+            K = length(channels);
+            if channelId < 1 || channelId > K
+                error("Invalid channelId: %d", channelId);
+            end
+            obj.currentChannel = channels{channelId};
+            ch = obj.currentChannel;
+        
+        end
+
         %========== 데이터 패킷 생성 ==========
         function createDataPacket(obj, dstId, payload)
             pkt = Packet(PacketType.DATA, obj.id, dstId, payload);
@@ -263,5 +274,8 @@ classdef Node < handle
                    sig1.packet.dstId == sig2.packet.dstId && ...
                    sig1.packet.type == sig2.packet.type;
         end
+
+
+
     end
 end
