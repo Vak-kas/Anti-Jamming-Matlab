@@ -18,7 +18,7 @@ classdef ChannelModel < handle
 
             N = length(txNodes);
 
-            % Tx/Rx 사용자 링크 및 간섭 링크
+            %========== Tx/Rx 사용자 링크 및 간섭 링크 ==========
             for txIdx = 1:N
                 for rxIdx = 1:N
                     txNode = txNodes{txIdx};
@@ -26,36 +26,47 @@ classdef ChannelModel < handle
 
                     gain = obj.generateGain(txNode.position, rxNode.position);
 
-                    % DATA 방향: TX_i -> RX_j
-                    keyData = obj.makeKey(txNode.role, txNode.id, rxNode.role, rxNode.id);
+                    % DATA 방향: Tx_i -> Rx_j
+                    keyData = obj.makeKey( ...
+                        txNode.role, txNode.id, ...
+                        rxNode.role, rxNode.id ...
+                    );
                     obj.gainMap(keyData) = gain;
 
-                    % ACK 방향
-                    if txNode.id == rxNode.id
-                        % 같은 사용자 pair는 DATA/ACK 동일 gain 사용
-                        keyAck = obj.makeKey(rxNode.role, rxNode.id, txNode.role, txNode.id);
-                        obj.gainMap(keyAck) = gain;
-                    else
-                        % 다른 사용자 간섭 링크는 별도 gain
-                        reverseGain = obj.generateGain(rxNode.position, txNode.position);
-                        keyReverse = obj.makeKey(rxNode.role, rxNode.id, txNode.role, txNode.id);
-                        obj.gainMap(keyReverse) = reverseGain;
-                    end
+                    % ACK/역방향: Rx_j -> Tx_i
+                    % 같은 슬롯에서는 reciprocal channel로 동일 gain 사용
+                    keyReverse = obj.makeKey( ...
+                        rxNode.role, rxNode.id, ...
+                        txNode.role, txNode.id ...
+                    );
+                    obj.gainMap(keyReverse) = gain;
                 end
             end
 
-            % Jammer -> 모든 TX/RX 링크
+            %========== Jammer -> Tx/Rx 링크 ==========
             for n = 1:N
                 txNode = txNodes{n};
                 rxNode = rxNodes{n};
-
-                keyJammerToTx = obj.makeKey(jammer.role, jammer.id, txNode.role, txNode.id);
-                obj.gainMap(keyJammerToTx) = ...
-                    obj.generateGain(jammer.position, txNode.position);
-
-                keyJammerToRx = obj.makeKey(jammer.role, jammer.id, rxNode.role, rxNode.id);
-                obj.gainMap(keyJammerToRx) = ...
-                    obj.generateGain(jammer.position, rxNode.position);
+            
+                % Jammer -> Tx_n
+                jammerToTxGain = obj.generateGain(jammer.position, txNode.position);
+            
+                keyJammerToTx = obj.makeKey( ...
+                    jammer.role, jammer.id, ...
+                    txNode.role, txNode.id ...
+                );
+            
+                obj.gainMap(keyJammerToTx) = jammerToTxGain;
+            
+                % Jammer -> Rx_n
+                jammerToRxGain = obj.generateGain(jammer.position, rxNode.position);
+            
+                keyJammerToRx = obj.makeKey( ...
+                    jammer.role, jammer.id, ...
+                    rxNode.role, rxNode.id ...
+                );
+            
+                obj.gainMap(keyJammerToRx) = jammerToRxGain;
             end
         end
 
@@ -72,7 +83,9 @@ classdef ChannelModel < handle
 
         %========== 링크 key 생성 ==========
         function key = makeKey(obj, txRole, txId, rxRole, rxId)
-            key = sprintf("%s%d_%s%d", string(txRole), txId, string(rxRole), rxId);
+            key = sprintf("%s%d_%s%d", ...
+                string(txRole), txId, ...
+                string(rxRole), rxId);
         end
 
         %========== 채널 이득 생성 ==========
@@ -86,7 +99,9 @@ classdef ChannelModel < handle
             % Small-scale fading: Rayleigh power gain
             h = (randn + 1i * randn) / sqrt(2);
             smallScaleFading = abs(h)^2;
+            % smallScaleFading = 1;
 
+            % Channel gain: g = d^(-mu) * |h|^2
             gain = largeScaleFading * smallScaleFading;
         end
     end

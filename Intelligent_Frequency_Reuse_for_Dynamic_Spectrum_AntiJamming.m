@@ -16,7 +16,7 @@ f_end = 29.5 * GHz; %29.5GHz
 
 
 %% 핵심 파라미터
-power = 1;
+power = 100;
 jammerPower = 10000000;
 
 pathLossExponent = 3;
