@@ -16,15 +16,15 @@ f_end = 29.5 * GHz; %29.5GHz
 
 
 %% 핵심 파라미터
-power = 100;
-jammerPower = 10000000;
+power = 50;
+jammerPower = 1000;
 
-pathLossExponent = 3;
+pathLossExponent = 2;
 
-thermalNoise_W = 1.38e-23 * 290 * BW_ch;
-thermalNoise = thermalNoise_W * 1000;   % W -> mW
+noisePower_dBm = -80;
+thermalNoise = 10^(noisePower_dBm / 10);  % mW
 
-betaThreshold_dB = 8;
+betaThreshold_dB = 10;
 betaThreshold = 10^(betaThreshold_dB / 10);
 
 %% initialize
