@@ -27,6 +27,14 @@ thermalNoise = 10^(noisePower_dBm / 10);  % mW
 betaThreshold_dB = 10;
 betaThreshold = 10^(betaThreshold_dB / 10);
 
+
+
+phi = 100;
+D = 5000;      % Experience pool capacity 
+gamma = 0.8;   % Discount factor
+eta = 0.8;     % Swept jamming 최적 가중치
+epsilon = 0;
+
 %% initialize
 channels = createChannels(K, BW_ch, f_start); %채널 생성
 channelModel = ChannelModel(pathLossExponent);
@@ -44,6 +52,12 @@ for slot = 1:T
     clearChannel(channels);
     channelModel.update(txNodes, rxNodes, jammer);
     success = zeros(N, 1);
+
+    %% Agent 생성
+    agents = cell(N, 1);
+    for n = 1:N
+        agents{n} = HybridDQNAgent(n, K, phi, D, gamma, eta, epsilon);
+    end
 
     %% TDEC (TODO)
 
