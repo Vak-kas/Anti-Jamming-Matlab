@@ -6,7 +6,7 @@ GHz = 1e9;
 %% 초기 환경 변수(Parameters)
 N = 20; %Number of Users
 K = 10; % Number of Channel
-T = 1; % Time Slot
+T = 2000; % Time Slot
 area = [2500, 2500, 0]; %전체 범위
 pairDistance = 50; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
 
@@ -28,12 +28,15 @@ betaThreshold_dB = 10;
 betaThreshold = 10^(betaThreshold_dB / 10);
 
 
-
+%% DQN Parameters
 phi = 100;
 D = 5000;      % Experience pool capacity 
 gamma = 0.8;   % Discount factor
-eta = 0.8;     % Swept jamming 최적 가중치
+eta = 0.8;     % Swept jamming 최적 가중치, 0.2면 comb jamming
 epsilon = 0;
+
+batchSize = 128;
+learnRate = 0.001;
 
 %% initialize
 channels = createChannels(K, BW_ch, f_start); %채널 생성
@@ -45,6 +48,12 @@ clearChannel(channels);
 NCT = zeros(1, T);
 
 
+%% Agent 생성
+agents = cell(N, 1);
+for n = 1:N
+    agents{n} = HybridDQNAgent(n, K, phi, D, gamma, eta, epsilon, batchSize, learnRate);
+end
+
 
 %% Simulation Start
 for slot = 1:T
@@ -53,18 +62,21 @@ for slot = 1:T
     channelModel.update(txNodes, rxNodes, jammer);
     success = zeros(N, 1);
 
-    %% Agent 생성
-    agents = cell(N, 1);
-    for n = 1:N
-        agents{n} = HybridDQNAgent(n, K, phi, D, gamma, eta, epsilon);
-    end
 
-    %% TDEC (TODO)
+    %% T_DEC : 현재 O_t 기반 채널 선택
+    O_t_list = cell(N, 1);
+    actionList = zeros(N, 1);
 
     %% Tx가 채널 선택
+    % for n = 1:N
+    %     txNodes{n}.selectChannel(slot, channels);
+    %     % fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
+    % end
     for n = 1:N
-        txNodes{n}.selectChannel(slot, channels);
-        % fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
+        O_t_list{n} = agents{n}.getObservation();
+        action = agents{n}.selectAction();
+        actionList(n) = action;
+        txNodes{n}.setChannelById(action, channels);
     end
 
     %% Tx가 보낼 Data 생성
@@ -94,6 +106,16 @@ for slot = 1:T
         % channels{channel}.printSignals();
     end
 
+
+
+    %% 센싱
+    o_next_list = cell(N, 1);
+    for n = 1:N
+        o_next_list{n} = senseSpectrum(txNodes{n},channels, channelModel,thermalNoise);
+    end
+
+
+
     %% Rx가 데이터 수신 및 ACK/NACK 생성
     for n = 1:N
         rxNodes{n}.receivedPacket(channels, betaThreshold, thermalNoise, channelModel);
@@ -120,6 +142,17 @@ for slot = 1:T
             fprintf("Tx %d received NACK or no ACK\n", txNodes{n}.id);
         end
     end
+
+    %% Agent 학습용 Experience 저장 및 Train
+    for n = 1:N
+        agents{n}.updateObservation(o_next_list{n});
+        O_next = agents{n}.getObservation();
+        [r_u, r_j] = getReward(success(n));
+        agents{n}.storeExperience(O_t_list{n}, actionList(n), r_u, r_j, O_next);
+        agents{n}.train();
+    end
+
+    
     
 
     %% 마무리
@@ -171,6 +204,16 @@ for slot = 1:T
     fprintf("=====================================\n");
 
 end
+
+figure;
+
+plot(1:T, NCT, 'LineWidth',2);
+
+xlabel('Time Slot');
+
+ylabel('NCT');
+
+grid on;
 
 
 
@@ -234,5 +277,45 @@ function [txNodes, rxNodes] = createNodes(N, area, power, FHP, pairDistance)
 
         txNodes{i} = Node(i, NodeType.Tx, txPosition, power, FHP);
         rxNodes{i} = Node(i, NodeType.Rx, rxPosition, power, []);
+    end
+end
+
+
+function [r_u, r_j] = getReward(success)
+
+    if success
+        r_u = 5;
+        r_j = 1;
+    else
+        r_u = -1;
+        r_j = -10;
+    end
+
+end
+
+function o_t = senseSpectrum(rxNode, channels, channelModel, thermalNoise)
+
+    K = length(channels);
+    o_t = zeros(1, K);
+
+    for k = 1:K
+        channel = channels{k};
+        signals = channel.getSignals();
+
+        totalPower = thermalNoise;
+
+        for i = 1:length(signals)
+            sig = signals{i};
+
+            gain = channelModel.getGain( ...
+                sig.txRole, ...
+                sig.txNodeId, ...
+                rxNode.role, ...
+                rxNode.id);
+
+            totalPower = totalPower + sig.txPower * gain;
+        end
+
+        o_t(k) = 10 * log10(totalPower);
     end
 end
