@@ -6,7 +6,7 @@ GHz = 1e9;
 %% 초기 환경 변수(Parameters)
 N = 20; %Number of Users
 K = 10; % Number of Channel
-T = 2000; % Time Slot
+T = 200; % Time Slot
 area = [2500, 2500, 0]; %전체 범위
 pairDistance = 50; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
 
@@ -42,7 +42,10 @@ learnRate = 0.001;
 channels = createChannels(K, BW_ch, f_start); %채널 생성
 channelModel = ChannelModel(pathLossExponent);
 [txNodes, rxNodes] = createNodes(N, area, power, @randomFHP, pairDistance);% tx, rx노드 생성
-jammer = Jammer(1001, @combJammerFHP, [1250, 1250, 0], jammerPower);
+
+combChannels = randperm(K, 3);
+% jammer = Jammer(1001, @(slot, K) sweptJammerFHP, [1250, 1250, 0], jammerPower);
+jammer = Jammer(1001, @sweptJammerFHP, [1250, 1250, 0], jammerPower);
 clearChannel(channels);
 
 NCT = zeros(1, T);
@@ -107,8 +110,9 @@ for slot = 1:T
     end
 
 
-
-    %% 센싱
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% %%%%%%%%%%%%% 센싱 %%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     o_next_list = cell(N, 1);
     for n = 1:N
         o_next_list{n} = senseSpectrum(txNodes{n},channels, channelModel,thermalNoise);
@@ -143,7 +147,9 @@ for slot = 1:T
         end
     end
 
-    %% Agent 학습용 Experience 저장 및 Train
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% Agent 학습용 Experience 저장 및 Train %%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     for n = 1:N
         agents{n}.updateObservation(o_next_list{n});
         O_next = agents{n}.getObservation();
@@ -231,8 +237,8 @@ function ch = sweptJammerFHP(slot, K)
     ch = mod(slot-1, K) + 1;
 end
 
-function ch = combJammerFHP(slot, K)
-    ch = [2, 5, 8];
+function ch = combJammerFHP(slot, K, combChannels)
+    ch = combChannels;
 end
 
 
