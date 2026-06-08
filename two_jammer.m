@@ -7,9 +7,9 @@ GHz = 1e9;
 N = 20; %Number of Users
 J = 2; %Number of Jammers
 K = 10; % Number of Channel
-T = 1; % Time Slot
+T = 1000; % Time Slot
 area = [2500, 2500, 0]; %전체 범위
-pairDistance = 50; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
+pairDistance = []; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
 
 BW_ch = 50 * MHz; %channel bandwidth = 50 MHz
 f_start = 26.5 * GHz; %26.5GHz
@@ -20,7 +20,7 @@ interferenceRange = 700;
 %% Time Parameters
 
 Tc_ms = 10;       % communication time slot
-Tj_ms = 7;        % jamming duration
+Tj_ms = 5;        % jamming duration
 
 
 
@@ -57,7 +57,7 @@ channelModel = ChannelModel(pathLossExponent);
 
 combChannels = randperm(K, 3);
 % jammer = Jammer(1001, @(slot, K) sweptJammerFHP, [1250, 1250, 0], jammerPower);
-jammer = Jammer(1001, @sweptJammerFHP, [500, 500, 0], jammerPower,"swept", Tc_ms, Tj_ms);
+jammer = Jammer(1001, @sweptJammerFHP, [1250, 1250, 0], jammerPower,"swept", Tc_ms, Tj_ms);
 % jammer = Jammer(1001, @combJammerFHP, [2000, 2000, 0], jammerPower,"comb", Tc_ms, Tj_ms);
 % jammer2 = Jammer(1002, @(slot, K) combJammerFHP(slot, K, combChannels), [2000, 2000, 0], jammerPower, Tc_ms, Tj_ms);
 clearChannel(channels);
@@ -130,16 +130,16 @@ for slot = 1:T
     actionList = zeros(N, 1);
 
     %% Tx가 채널 선택
-    for n = 1:N
-        txNodes{n}.selectChannel(slot, channels);
-        % fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
-    end
     % for n = 1:N
-    %     O_t_list{n} = agents{n}.getObservation();
-    %     action = agents{n}.selectAction();
-    %     actionList(n) = action;
-    %     txNodes{n}.setChannelById(action, channels);
+    %     txNodes{n}.selectChannel(slot, channels);
+    %     % fprintf("Tx %d -> Channel %d\n", txNodes{n}.id, txNodes{n}.currentChannel.id);
     % end
+    for n = 1:N
+        O_t_list{n} = agents{n}.getObservation();
+        action = agents{n}.selectAction();
+        actionList(n) = action;
+        txNodes{n}.setChannelById(action, channels);
+    end
 
     %% Tx가 보낼 Data 생성
     for n = 1:N
@@ -172,10 +172,10 @@ for slot = 1:T
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% %%%%%%%%%%%%% 센싱 %%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % o_next_list = cell(N, 1);
-    % for n = 1:N
-    %     o_next_list{n} = senseSpectrum(txNodes{n},channels, channelModel,thermalNoise);
-    % end
+    o_next_list = cell(N, 1);
+    for n = 1:N
+        o_next_list{n} = senseSpectrum(txNodes{n},channels, channelModel,thermalNoise);
+    end
 
 
 
@@ -209,21 +209,21 @@ for slot = 1:T
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% Agent 학습용 Experience 저장 및 Train %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % for n = 1:N
-    %     agents{n}.updateObservation(o_next_list{n});
-    %     O_next = agents{n}.getObservation();
-    %     [r_u, r_j] = getReward(success(n));
-    %     agents{n}.storeExperience(O_t_list{n}, actionList(n), r_u, r_j, O_next);
-    %     agents{n}.train();
-    % end
+    for n = 1:N
+        agents{n}.updateObservation(o_next_list{n});
+        O_next = agents{n}.getObservation();
+        [r_u, r_j] = getReward(success(n));
+        agents{n}.storeExperience(O_t_list{n}, actionList(n), r_u, r_j, O_next);
+        agents{n}.train();
+    end
 
 
 
 
     %% 마무리
-    % NCT(slot) = mean(success);
-    % fprintf("\n========== Slot %d Summary ==========\n", slot);
-    % fprintf("NCT = %.3f\n", NCT(slot));
+    NCT(slot) = mean(success);
+    fprintf("\n========== Slot %d Summary ==========\n", slot);
+    fprintf("NCT = %.3f\n", NCT(slot));
 
     % 재밍된 채널 정보 출력
     fprintf("\n[Jammed Channels]\n");
@@ -276,6 +276,29 @@ figure;
 % xlabel('Time Slot');
 % ylabel('NCT');
 % grid on;
+
+windowSize = 50;
+NCT_smooth = movmean(NCT, windowSize);
+plot(1:T, NCT, ...
+    'Color',[0.8 0.8 0.8], ...
+    'LineWidth',0.5);
+
+hold on;
+
+plot(1:T, NCT_smooth, ...
+    'b', ...
+    'LineWidth',2.5);
+
+xlabel('Communication Time Slot');
+ylabel('Normalized Communication Throughput (NCT)');
+title('DQN Anti-Jamming Convergence');
+
+legend('Raw NCT', ...
+       sprintf('Moving Average (%d slots)',windowSize), ...
+       'Location','southeast');
+
+grid on;
+ylim([0.5 1.05]);
 
 
 
