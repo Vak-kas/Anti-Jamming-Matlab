@@ -12,20 +12,34 @@ classdef Node < handle
 
         txBuffer
         rxBuffer
+
+
+
+        Tc_ms
+        Ttrans_ms
+        Tack_ms
+        Tdec_ms
     end
 
     methods
         %========== 노드 초기화 ==========
-        function obj = Node(id, role, position, txPower, FHP)
+        function obj = Node(id, role, position, txPower, FHP, Tc_ms)
             obj.id = id;
             obj.role = role;
             obj.position = position;
             obj.txPower = txPower;
             obj.FHP = FHP;
+            obj.Tc_ms = Tc_ms;
 
             obj.currentChannel = [];
             obj.txBuffer = {};
             obj.rxBuffer = {};
+
+
+            % 7 : 2 : 1 비율
+            obj.Ttrans_ms = Tc_ms * 0.7;
+            obj.Tack_ms  = Tc_ms * 0.2;
+            obj.Tdec_ms  = Tc_ms * 0.1;
         end
 
         %========== 채널 선택 ==========
@@ -67,15 +81,30 @@ classdef Node < handle
         %========== 패킷 송신 ==========
         function pkt = sendPacket(obj)
             pkt = obj.popTxPacket();
-
+        
             if isempty(pkt)
                 return;
             end
-
+        
             if isempty(obj.currentChannel)
                 error("currentChannel is empty. Select channel first.");
             end
-
+        
+            % Packet type에 따라 slot 내부 상대 시간 설정
+            if pkt.type == PacketType.DATA
+                startTime_ms = 0;
+                endTime_ms   = obj.Ttrans_ms;
+        
+            elseif pkt.type == PacketType.ACK || pkt.type == PacketType.NACK
+                startTime_ms = obj.Ttrans_ms;
+                endTime_ms   = obj.Ttrans_ms + obj.Tack_ms;
+        
+            else
+                startTime_ms = 0;
+                endTime_ms   = obj.Tc_ms;
+        
+            end
+        
             sig = Signal( ...
                 SignalType.COMM, ...
                 pkt, ...
@@ -83,10 +112,13 @@ classdef Node < handle
                 obj.id, ...
                 obj.role, ...
                 obj.currentChannel.id, ...
-                obj.position ...
+                obj.position, ...
+                startTime_ms, ...
+                endTime_ms ...
             );
-
+        
             obj.currentChannel.addSignal(sig);
+        
         end
 
         %========== 패킷 수신(DATA 수신 후 ACK/NACK 생성) ==========
@@ -205,6 +237,13 @@ classdef Node < handle
             jammingPower = 0;
             interferencePower = 0;
 
+
+            desiredDuration = desiredSignal.getDuration();
+
+            if desiredDuration <= 0 || isinf(desiredDuration)
+                desiredDuration = 1;
+            end
+
             signals = channel.getSignals();
 
             for i = 1:length(signals)
@@ -214,7 +253,22 @@ classdef Node < handle
                     continue;
                 end
 
-                rxPower = obj.computeReceivedPower(sig, channelModel);
+                overlapTime = desiredSignal.getOverlapTime(sig);
+
+                if overlapTime <= 0
+                    continue;
+                end
+
+                rho = overlapTime / desiredDuration;
+                if sig.type == SignalType.JAMMING
+                    fprintf( ...
+                        "  JAM CH%d | overlap=%.2f ms | rho=%.2f\n", ...
+                        sig.txChannelId, overlapTime, rho);
+                end
+                
+
+                rxPower = obj.computeReceivedPower(sig, channelModel) * rho;
+
 
                 if sig.type == SignalType.JAMMING
                     jammingPower = jammingPower + rxPower;
