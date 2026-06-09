@@ -51,9 +51,15 @@ classdef HybridDQNAgent < handle
 
             obj.historyBuffer = zeros(phi, K);
             obj.replayBuffer = {};
+            
+            % obj.net_u = obj.createQNetwork();
+            % obj.net_j = obj.createQNetwork();
+            % obj.net_j.Learnables = obj.net_u.Learnables;
 
             obj.net_u = obj.createQNetwork();
             obj.net_j = obj.createQNetwork();
+
+            obj.net_j.Learnables = obj.net_u.Learnables;
 
             
 
@@ -111,8 +117,8 @@ classdef HybridDQNAgent < handle
             end
 
             % 오래된 행 제거, 새 센싱 결과를 마지막 행에 추가
-            obj.historyBuffer(1:end-1, :) = obj.historyBuffer(2:end, :);
-            obj.historyBuffer(end, :) = o_t;
+            obj.historyBuffer(2:end, :) = obj.historyBuffer(1:end-1, :);
+           obj.historyBuffer(1, :)  = o_t;
         end
 
 
@@ -140,6 +146,11 @@ classdef HybridDQNAgent < handle
 
         % ========== 채널 선택 ==========
         function action = selectAction(obj)
+
+            if rand < obj.epsilon
+                action = randi(obj.K);
+                return;
+            end
             [~, ~, compositeQ] = obj.predictQ();
             % [~, action] = max(compositeQ);
         

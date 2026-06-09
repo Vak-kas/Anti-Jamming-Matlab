@@ -66,6 +66,7 @@ classdef Channel < handle
 
             obj.signals = newSignals;
         end
+        
 
 
     end

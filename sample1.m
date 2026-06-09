@@ -7,7 +7,7 @@ GHz = 1e9;
 %% Parameters
 N = 20;
 K = 10;
-T = 1000;
+T = 300;
 
 area = [2500, 2500, 0];
 pairDistance = [];

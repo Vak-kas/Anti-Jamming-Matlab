@@ -156,18 +156,16 @@ classdef Node < handle
 
                     sinr = obj.computeSINR(channel, sig, thermalNoise, channelModel);
 
+                    % Node.m 내부 receivedPacket 메서드 수정
                     if sinr > betaThreshold
                         obj.rxBuffer{end+1} = pkt;
-
                         ackPkt = Packet(PacketType.ACK, obj.id, pkt.srcId, "ACK");
                         obj.txBuffer{end+1} = ackPkt;
-
-                        obj.currentChannel = channel;
+                        obj.currentChannel = channel; % ACK 송신 채널 확정
                     else
                         nackPkt = Packet(PacketType.NACK, obj.id, pkt.srcId, "NACK");
                         obj.txBuffer{end+1} = nackPkt;
-
-                        obj.currentChannel = channel;
+                        obj.currentChannel = channel; % ★ [수정] NACK도 데이터가 날아왔던 이 채널로 정확하게 회신하도록 설정!
                     end
 
                     return;
@@ -175,58 +173,47 @@ classdef Node < handle
             end
         end
 
-        %========== ACK/NACK 수신 ==========
+        %========== 패킷 수신(ACK/NAC) ==========
+        % Node.m 내부 receiveAck 메서드 수정
         function success = receiveAck(obj, betaThreshold, thermalNoise, channelModel)
             success = false;
-
-            if isempty(obj.currentChannel)
-                return;
-            end
-
+            if isempty(obj.currentChannel), return; end
+            
             signals = obj.currentChannel.getSignals();
-
-            if isempty(signals)
-                return;
-            end
-
+            if isempty(signals), return; end
+            
             for i = 1:length(signals)
                 sig = signals{i};
-
-                if sig.type ~= SignalType.COMM
-                    continue;
-                end
-
-                if isempty(sig.packet)
-                    continue;
-                end
-
+                if sig.type ~= SignalType.COMM, continue; end
+                if isempty(sig.packet), continue; end
+                
                 pkt = sig.packet;
-
-                if pkt.dstId ~= obj.id
-                    continue;
-                end
-
-                if pkt.type ~= PacketType.ACK && pkt.type ~= PacketType.NACK
-                    continue;
-                end
-
+                if pkt.dstId ~= obj.id, continue; end
+                
+                % 1. [★ 철벽 수비] NACK 타입 패킷이 내 주파수 축에서 발견되었다? 
+                % SINR이 무한대든 나발이든 간에 수신기가 못 받았다고 선언한 것이므로 즉시 실패 처리!
                 if pkt.type == PacketType.NACK
                     obj.rxBuffer{end+1} = pkt;
-                    success = false;
+                    success = false; % 무조건 실패
+                    fprintf("Tx %d | Received 명시적 NACK -> 통신 실패\n", obj.id);
                     return;
                 end
+                
+                % 2. ACK 타입 패킷일 때만 정상적으로 무선 SINR 통과 장벽을 평가합니다.
+                if pkt.type == PacketType.ACK
+                    ackSinr = obj.computeSINR(obj.currentChannel, sig, thermalNoise, channelModel);
+                    % 다음과 같이 출력문을 살짝 다듬으면 나중에 화면 보기 아주 편해집니다.
+                    if ackSinr > betaThreshold
+                        obj.rxBuffer{end+1} = pkt;
+                        success = true;
+                        fprintf("Tx %d | ACK 수신 성공 (SINR = %.3e)\n", obj.id, ackSinr);
+                    else
+                        success = false;
+                        fprintf("Tx %d | ACK 수신 실패 - 신호 깨짐 (SINR = %.3e)\n", obj.id, ackSinr);
+                    end
 
-                ackSinr = obj.computeSINR(obj.currentChannel, sig, thermalNoise, channelModel);
-
-                if ackSinr > betaThreshold
-                    obj.rxBuffer{end+1} = pkt;
-                    success = true;
-                else
-                    success = false;
+                    return;
                 end
-
-                fprintf("Tx %d | ACK SINR = %.3e\n", obj.id, ackSinr);
-                return;
             end
         end
 
@@ -285,13 +272,14 @@ classdef Node < handle
 
         %========== 수신 전력 계산 ==========
         function rxPower = computeReceivedPower(obj, sig, channelModel)
+            % sig 객체가 들고 있는 현재 주파수 채널 ID(txChannelId)를 함께 넘겨줍니다.
             gain = channelModel.getGain( ...
                 sig.txRole, ...
                 sig.txNodeId, ...
                 obj.role, ...
-                obj.id ...
+                obj.id, ...
+                sig.txChannelId ...   % <-- 채널 ID 인자 추가!
             );
-
             rxPower = sig.txPower * gain;
         end
 
