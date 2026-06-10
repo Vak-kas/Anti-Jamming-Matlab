@@ -59,7 +59,7 @@ classdef HybridDQNAgent < handle
             obj.net_u = obj.createQNetwork();
             obj.net_j = obj.createQNetwork();
 
-            obj.net_j.Learnables = obj.net_u.Learnables;
+            % obj.net_j.Learnables = obj.net_u.Learnables;
 
             
 
