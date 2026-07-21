@@ -10,7 +10,7 @@ J = 1; %Number of Jammers
 K = 10; % Number of Channel
 T = 1000; % Time Slot
 area = [2500, 2500, 0]; %전체 범위
-pairDistance = 200; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
+pairDistance = 125; %Tx, Rx 쌍 거리, 처리 안 할 거면 []
 
 BW_ch = 50 * MHz; %channel bandwidth = 50 MHz
 f_start = 26.5 * GHz; %26.5GHz
@@ -42,14 +42,17 @@ betaThreshold = 10^(betaThreshold_dB / 10);
 Phi_ms = 100;     % spectrum sensing history time
 D = 5000;      % Experience pool capacity 
 gamma = 0.8;   % Discount factor
-eta = 0;     % Swept jamming 최적 가중치, 0.2면 comb jamming
-epsilon_start = 1.0; % 초반에는 100% 확률로 랜덤 탐색
-epsilon_min   = 0.01;
-epsilon_decay = 0.990; % 매 슬롯마다 조금씩 감소
+eta = 0.8;     % Swept jamming 최적 가중치, 0.2면 comb jamming
+epsilon_start = 0; % 초반에는 100% 확률로 랜덤 탐색
+epsilon_min   = 0;
+epsilon_decay = 1; % 매 슬롯마다 조금씩 감소
+% epsilon_start = 1.0;
+% epsilon_min   = 0.01;
+% epsilon_decay = 0.995;
 epsilon       = epsilon_start;
 
 batchSize = 128;
-learnRate = 0.0005;
+learnRate = 0.005;
 %% initialize
 phi = Phi_ms / Tc_ms;   % history 개수 = 100ms / 10ms = 10
 
@@ -60,8 +63,8 @@ channelModel = ChannelModel(pathLossExponent);
 
 % combChannels = randperm(K, 3);
 % jammer = Jammer(1001, @(slot, K) sweptJammerFHP, [1250, 1250, 0], jammerPower);
-% jammer = Jammer(1001, @sweptJammerFHP, [1250, 1250, 0], jammerPower,"swept", Tc_ms, Tj_ms);
-jammer = Jammer(1001, @combJammerFHP, [1250, 1250, 0], jammerPower,"comb", Tc_ms, Tj_ms);
+jammer = Jammer(1001, @sweptJammerFHP, [1250, 1250, 0], jammerPower,"swept", Tc_ms, Tj_ms);
+% jammer = Jammer(1001, @combJammerFHP, [500, 500, 0], jammerPower,"comb", Tc_ms, Tj_ms);
 % jammer2 = Jammer(1002, @(slot, K) combJammerFHP(slot, K, combChannels), [2000, 2000, 0], jammerPower, Tc_ms, Tj_ms);
 clearChannel(channels);
 
@@ -240,7 +243,7 @@ for slot = 1:T
 
     for j = 1:length(jammer.currentChannels)
         jamCh = jammer.currentChannels{j};
-        fprintf("Jammed Channel %d\n", jamCh.id);
+        % fprintf("Jammed Channel %d\n", jamCh.id);
 
         for n = 1:N
             if txNodes{n}.currentChannel.id == jamCh.id
@@ -250,33 +253,33 @@ for slot = 1:T
                     resultText = "NACK or No ACK";
                 end
 
-                fprintf("  Tx %d -> Rx %d | Result: %s\n", ...
-                    txNodes{n}.id, rxNodes{n}.id, resultText);
+                % fprintf("  Tx %d -> Rx %d | Result: %s\n", ...
+                %     txNodes{n}.id, rxNodes{n}.id, resultText);
             end
         end
     end
 
-    % 실패한 노드 전체 정보 출력
-    fprintf("\n[Failed Users]\n");
-
-    failedCount = 0;
-
-    for n = 1:N
-        if success(n) == 0
-            failedCount = failedCount + 1;
-
-            fprintf("  Tx %d -> Rx %d | Channel %d\n", ...
-                txNodes{n}.id, ...
-                rxNodes{n}.id, ...
-                txNodes{n}.currentChannel.id);
-        end
-    end
-
-    if failedCount == 0
-        fprintf("  None\n");
-    end
-
-    fprintf("=====================================\n");
+    % % 실패한 노드 전체 정보 출력
+    % fprintf("\n[Failed Users]\n");
+    % 
+    % failedCount = 0;
+    % 
+    % for n = 1:N
+    %     if success(n) == 0
+    %         failedCount = failedCount + 1;
+    % 
+    %         fprintf("  Tx %d -> Rx %d | Channel %d\n", ...
+    %             txNodes{n}.id, ...
+    %             rxNodes{n}.id, ...
+    %             txNodes{n}.currentChannel.id);
+    %     end
+    % end
+    % 
+    % if failedCount == 0
+    %     fprintf("  None\n");
+    % end
+    % 
+    % fprintf("=====================================\n");
 
 
     % 슬롯이 끝나는 지점
@@ -290,48 +293,48 @@ end
 
 %% 학습 종료 후 전체 Agent Observation 출력
 
-fprintf("\n\n================ Final Observation of All Agents ================\n");
-
-finalObservations = zeros(N, phi, K);
-
-for n = 1:N
-
-    O_final = agents{n}.getObservation();
-
-    finalObservations(n, :, :) = O_final;
-
-    fprintf("\n[Agent %d Final Observation] size = %d x %d\n", ...
-        n, size(O_final, 1), size(O_final, 2));
-
-    disp(array2table( ...
-        O_final, ...
-        'VariableNames', compose("CH%d", 1:K), ...
-        'RowNames', compose("t-%d", 0:phi-1) ...
-    ));
-
-end
-
-channelCount = zeros(1, K);
-for n = 1:N
-
-    oldEps = agents{n}.epsilon;
-
-    agents{n}.epsilon = 0;
-
-    [~, ~, compositeQ] = agents{n}.predictQ();
-
-    [~, action] = max(compositeQ);
-
-    channelCount(action) = channelCount(action) + 1;
-
-    agents{n}.epsilon = oldEps;
-
-end
-
-disp("Final Greedy Channel Count:");
-
-disp(channelCount);
-
+% fprintf("\n\n================ Final Observation of All Agents ================\n");
+% 
+% finalObservations = zeros(N, phi, K);
+% 
+% for n = 1:N
+% 
+%     O_final = agents{n}.getObservation();
+% 
+%     finalObservations(n, :, :) = O_final;
+% 
+%     fprintf("\n[Agent %d Final Observation] size = %d x %d\n", ...
+%         n, size(O_final, 1), size(O_final, 2));
+% 
+%     % disp(array2table( ...
+%     %     O_final, ...
+%     %     'VariableNames', compose("CH%d", 1:K), ...
+%     %     'RowNames', compose("t-%d", 0:phi-1) ...
+%     % ));
+% 
+% end
+% 
+% channelCount = zeros(1, K);
+% for n = 1:N
+% 
+%     oldEps = agents{n}.epsilon;
+% 
+%     agents{n}.epsilon = 0;
+% 
+%     [~, ~, compositeQ] = agents{n}.predictQ();
+% 
+%     [~, action] = max(compositeQ);
+% 
+%     channelCount(action) = channelCount(action) + 1;
+% 
+%     agents{n}.epsilon = oldEps;
+% 
+% end
+% 
+% disp("Final Greedy Channel Count:");
+% 
+% disp(channelCount);
+% 
 
 
 
@@ -420,6 +423,7 @@ function ch = sweptJammerFHP(slot, K, Tc_ms, Tj_ms)
 
     ch = unique(ch, 'stable');
 end
+
 
 
 function ch = combJammerFHP(slot, K, Tc_ms, Tj_ms)
@@ -578,6 +582,7 @@ function o_t = senseSpectrum(txNode, channels, channelModel, thermalNoise)
         p_dBm = 10*log10(totalPower+eps);
 
         o_t(k) = (p_dBm + 80) / 80;
+        % o_t(k) = p_dBm;
 
         o_t(k) = max(0,min(1,o_t(k)));
 

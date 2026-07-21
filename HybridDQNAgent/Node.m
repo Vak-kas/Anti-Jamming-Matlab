@@ -195,7 +195,7 @@ classdef Node < handle
                 if pkt.type == PacketType.NACK
                     obj.rxBuffer{end+1} = pkt;
                     success = false; % 무조건 실패
-                    fprintf("Tx %d | Received 명시적 NACK -> 통신 실패\n", obj.id);
+                    % fprintf("Tx %d | Received 명시적 NACK -> 통신 실패\n", obj.id);
                     return;
                 end
                 
@@ -206,10 +206,10 @@ classdef Node < handle
                     if ackSinr > betaThreshold
                         obj.rxBuffer{end+1} = pkt;
                         success = true;
-                        fprintf("Tx %d | ACK 수신 성공 (SINR = %.3e)\n", obj.id, ackSinr);
+                        % fprintf("Tx %d | ACK 수신 성공 (SINR = %.3e)\n", obj.id, ackSinr);
                     else
                         success = false;
-                        fprintf("Tx %d | ACK 수신 실패 - 신호 깨짐 (SINR = %.3e)\n", obj.id, ackSinr);
+                        % fprintf("Tx %d | ACK 수신 실패 - 신호 깨짐 (SINR = %.3e)\n", obj.id, ackSinr);
                     end
 
                     return;
@@ -248,9 +248,9 @@ classdef Node < handle
 
                 rho = overlapTime / desiredDuration;
                 if sig.type == SignalType.JAMMING
-                    fprintf( ...
-                        "  JAM CH%d | overlap=%.2f ms | rho=%.2f\n", ...
-                        sig.txChannelId, overlapTime, rho);
+                    % fprintf( ...
+                    %     "  JAM CH%d | overlap=%.2f ms | rho=%.2f\n", ...
+                    %     sig.txChannelId, overlapTime, rho);
                 end
                 
 
@@ -266,8 +266,8 @@ classdef Node < handle
 
             sinr = desiredPower / (jammingPower + interferencePower + thermalNoise);
 
-            fprintf("Node %d | CH %d | desired=%.3e | jam=%.3e | interf=%.3e | noise=%.3e | SINR=%.3e\n", ...
-                obj.id, channel.id, desiredPower, jammingPower, interferencePower, thermalNoise, sinr);
+            % fprintf("Node %d | CH %d | desired=%.3e | jam=%.3e | interf=%.3e | noise=%.3e | SINR=%.3e\n", ...
+            %     obj.id, channel.id, desiredPower, jammingPower, interferencePower, thermalNoise, sinr);
         end
 
         %========== 수신 전력 계산 ==========
