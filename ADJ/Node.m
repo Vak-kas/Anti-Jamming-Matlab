@@ -1,14 +1,16 @@
-classdef (Abstract) Node < handle
+classdef (Abstract) Node
     properties
         Id
+        Type
         Position
         TxPower_dBm
     end
 
     methods
         % ========== 생성자 ==========
-        function obj = Node(id, position, txPower_dBm)
+        function obj = Node(id, type, position, txPower_dBm)
             obj.Id = id;
+            obj.Type = type;
             obj.Position = position(:);
             obj.TxPower_dBm = txPower_dBm;
         end

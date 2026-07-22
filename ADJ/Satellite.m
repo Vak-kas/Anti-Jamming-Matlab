@@ -7,7 +7,7 @@ classdef Satellite < Node
     methods
         % ========== 생성자 ========== %
         function obj = Satellite(id, position, txPower_dBm, associatedUTId, threshold)
-            obj@Node(id, position, txPower_dBm);
+            obj@Node(id, NodeType.Satellite, position, txPower_dBm);
             obj.AssociatedUTId = associatedUTId;
             obj.Threshold = threshold;
         end

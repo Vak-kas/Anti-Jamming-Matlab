@@ -7,7 +7,7 @@ classdef UT < Node
     methods
         % ========== 생성자 ========== %
         function obj = UT(id, position, txPower_dBm, isTarget)
-            obj@Node(id, position, txPower_dBm);
+            obj@Node(id, NodeType.UT, position, txPower_dBm);
             obj.IsTarget = isTarget;
             obj.SelectedChannel = 1;
         end

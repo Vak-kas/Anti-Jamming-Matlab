@@ -7,7 +7,7 @@ classdef APJ < Node
     methods
         % ========== 생성자 ========== %
         function obj = APJ(id, position, txPower_dBm, targetUTid)
-            obj@Node(id, position, txPower_dBm);
+            obj@Node(id, NodeType.APJ, position, txPower_dBm);
             obj.TargetUTId = targetUTid;
         end
     end
