@@ -1,3 +1,8 @@
+%% ==================== Simulation Parameters ====================
+reconnaissanceDuration = 1000;
+numTimeSlots = 2000;
+useAgent = false;
+
 %% ==================== System Parameters ====================
 
 numSatellites = 10; % Number of satellites
