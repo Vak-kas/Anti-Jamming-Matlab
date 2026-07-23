@@ -20,7 +20,7 @@ classdef Channel < handle
         end
 
         % ========== 채널 패킷 가져오기 ========== %
-        function packets = getPacket(obj)
+        function packets = getPackets(obj)
             packets = obj.Packets;
         end
             
