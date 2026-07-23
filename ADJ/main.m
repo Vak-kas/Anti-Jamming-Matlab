@@ -58,16 +58,25 @@ ax = FigureHelper.plotUTDeployment(UTs, groundWidth, groundHeight);
 FigureHelper.plotAPJ(ax, APJ);
 
 
-%% ==================== DEBUG - UT와 Satellite생성 ====================
-% for n = 1:numSatellites
-%     distance = UTs(n).distanceTo(Satellites(n));
-% 
-%     fprintf(['Satellite %d - UT %d | ' ...
-%              'Distance: %.2f km\n'], ...
-%         Satellites(n).Id, ...
-%         Satellites(n).AssociatedUTId, ...
-%         distance / 1e3);
-% end
-% %% ==================================================================
+
+% DebugHelper.printAssociationDistances(UTs, Satellites);
 
 
+
+%% ==================== 채널 생성 ====================
+ServiceChannels = Channel.empty(0, K);
+ControlChannels = Channel.empty(0, K);
+
+for k = 1:K
+    ServiceChannels(k) = Channel(k, ChannelType.Service);
+    ControlChannels(k) = Channel(k, ChannelType.Control);
+end
+
+% DebugHelper.printChannels(ServiceChannels, ControlChannels);
+
+
+%% ==================== Time Slot 마다 수행 ====================
+timeSlot = TimeSlot();
+for i = 1:reconnaissanceDuration
+    result = timeSlot.run(i, UTs, Satellites, APJ, ServiceChannels, ControlChannels);
+end
