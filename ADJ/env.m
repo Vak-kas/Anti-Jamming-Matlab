@@ -1,6 +1,6 @@
 %% ==================== Simulation Parameters ====================
-reconnaissanceDuration = 1000;
-numTimeSlots = 2000;
+reconnaissanceDuration = 1;
+numTimeSlots = 1;
 useAgent = false;
 
 %% ==================== System Parameters ====================
