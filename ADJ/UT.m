@@ -11,5 +11,11 @@ classdef UT < Node
             obj.IsTarget = isTarget;
             obj.SelectedChannel = 1;
         end
+
+        % ========== HARQ값 수신 ========== %
+        function actualACK = receiveHARQFeedback(obj, ControlChannels)
+            packet = obj.findMyPacket(ControlChannels);
+            actualACK = (packet.Type == PacketType.ACK);
+        end
     end
 end
