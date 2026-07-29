@@ -126,6 +126,66 @@ classdef DebugHelper
         end
 
 
+        % ========== APJ HARQ 예측 결과 출력 ==========
+        function printHARQPredictionResult(TP, FN, FP, TN)
+            total = TP + TN + FP + FN;
+
+            if total == 0
+                accuracy = 0;
+            else
+                accuracy = (TP + TN) / total;
+            end
+
+            if (TP + FP) == 0
+                precision = 0;
+            else
+                precision = TP / (TP + FP);
+            end
+
+            if (TP + FN) == 0
+                recall = 0;
+            else
+                recall = TP / (TP + FN);
+            end
+
+            if (precision + recall) == 0
+                f1Score = 0;
+            else
+                f1Score = 2 * precision * recall / (precision + recall);
+            end
+
+            fprintf("\n========== APJ HARQ Prediction Result ==========\n");
+            fprintf("TP : %d\n", TP);
+            fprintf("FN : %d\n", FN);
+            fprintf("FP : %d\n", FP);
+            fprintf("TN : %d\n", TN);
+            fprintf("-----------------------------------------------\n");
+            fprintf("Accuracy  : %.4f\n", accuracy);
+            fprintf("Precision : %.4f\n", precision);
+            fprintf("Recall    : %.4f\n", recall);
+            fprintf("F1 Score  : %.4f\n", f1Score);
+            fprintf("================================================\n");
+        end
+
+         % ========== Satellite 정보 출력 ==========
+        function printSatelliteInfo(satellite)
+            fprintf("\n");
+            fprintf("========== Satellite %d ==========\n", satellite.Id);
+            fprintf("Rx Gain                : %.1f dBi\n", satellite.SatelliteRxGain_dBi);
+            fprintf("G/T                    : %.1f dB/K\n", satellite.SatelliteGOverT_dB);
+            fprintf("System Noise Temp.     : %.2f K\n", satellite.SystemNoiseTemperature_K);
+            fprintf("Tx Power               : %.2f dBm\n", satellite.TxPower_dBm);
+            fprintf("Associated UT          : %d\n", satellite.AssociatedUTId);
+            fprintf("SINR Threshold         : %.2f dB\n", satellite.Threshold);
+            fprintf("Position               : (%.2f, %.2f, %.2f) m\n", ...
+                satellite.Position(1), ...
+                satellite.Position(2), ...
+                satellite.Position(3));
+            fprintf("=================================\n\n");
+    
+        end
+
+
     end
 
 end
