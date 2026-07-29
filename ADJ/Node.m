@@ -1,9 +1,12 @@
-classdef (Abstract) Node
+classdef (Abstract) Node < handle
     properties
         Id
         Type
         Position
         TxPower_dBm
+        k = 1.380649e-23;
+        NoiseTemperature = 290
+        NoiseFigure_dB
     end
 
     methods
