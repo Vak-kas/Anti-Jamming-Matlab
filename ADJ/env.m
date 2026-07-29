@@ -1,9 +1,11 @@
-%% ==================== Simulation Parameters ====================
+%% ==================== Simulation Parameters ====================
 reconnaissanceDuration = 1;
-numTimeSlots = 1;
+numTimeSlots = 1000;
 useAgent = false;
 
 %% ==================== System Parameters ====================
+serviceBandStart_Hz = 1980e6;
+serviceBandEnd_Hz = 2010e6;
 
 numSatellites = 10; % Number of satellites
 numUTs = 10; % Number of UTs
@@ -38,7 +40,11 @@ satelliteTxPower_dBm = 40; %임시 값
 apjTxPower_dBm = 37;
 
 % SINR Threshold
-sinrThreshold_dB = 8;
+sinrThreshold_dB = 3;
+APJsinrThreshold_db = 14;
+
+satelliteRxGain_dBi = 30;      % Set-1
+satelliteGOverT_dB = 1.1;       % Set-1
 
 
 
@@ -50,3 +56,7 @@ satelliteTxPower_W = 10^((satelliteTxPower_dBm - 30) / 10); % Convert satellite 
 apjTxPower_W = 10^((apjTxPower_dBm - 30) / 10); % Convert APJ transmit power from dBm to Watts
 
 
+totalBandwidth_Hz = serviceBandEnd_Hz - serviceBandStart_Hz;
+NumServiceChannels = K;
+channelSpacing_Hz = totalBandwidth_Hz / NumServiceChannels;
+channelBandwidth_Hz = 360e3;
