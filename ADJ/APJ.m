@@ -6,11 +6,13 @@ classdef APJ < Node
         JammingChannel
 
         Threshold
+
+        ObservationManager
     end
 
     methods
         % ========== 생성자 ========== %
-        function obj = APJ(id, position, txPower_dBm, targetUTid, threshold)
+        function obj = APJ(id, position, txPower_dBm, targetUTid, threshold, numChannels, phi)
             obj@Node(id, NodeType.APJ, position, txPower_dBm);
             obj.NoiseFigure_dB = 7;
             obj.TargetUTId = targetUTid;
@@ -19,6 +21,8 @@ classdef APJ < Node
             obj.JammingChannel = [];
 
             obj.Threshold = threshold;
+
+            obj.ObservationManager = ObservationManager(obj, numChannels, phi);
         end
 
 

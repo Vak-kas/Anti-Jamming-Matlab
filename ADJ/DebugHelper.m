@@ -186,6 +186,57 @@ classdef DebugHelper
         end
 
 
+        % ========== 센싱 출력 ==========
+        function printObservation(owner, ServiceChannels, UTs)
+            fprintf("\n========== Observation Debug (UT %d) ==========\n", owner.Id);
+        
+            for ch = 1:numel(ServiceChannels)
+                fprintf("Channel %2d\n", ch);
+                channel = ServiceChannels(ch);
+                packets = channel.getPackets();
+        
+                totalPower_W = 0;
+        
+                for p = 1:numel(packets)
+                    packet = packets(p);
+        
+                    if packet.SourceId == owner.Id
+                        continue;
+                    end
+        
+                    sourceNode = UTs(packet.SourceId);
+                    lambda = 3e8 / channel.CenterFrequency_Hz;
+                    distance = owner.distanceTo(sourceNode);
+                    h = (lambda/(4*pi*distance))^2;
+                    txPower_W = 10^((sourceNode.TxPower_dBm-30)/10);
+                    rxPower_W = txPower_W*h;
+        
+                    rxPower_dBm = 10*log10(rxPower_W)+30;
+                    totalPower_W = totalPower_W + rxPower_W;
+        
+                    fprintf("    TX : UT %d\n", packet.SourceId);
+                    fprintf("        Distance : %.2f km\n", distance/1000);
+                    fprintf("        Rx Power : %.2f dBm\n", rxPower_dBm);
+        
+                end
+        
+                noiseFigure = 10^(owner.NoiseFigure_dB/10);
+                noisePower_W = owner.k * ...
+                               owner.NoiseTemperature * ...
+                               channel.Bandwidth_Hz * ...
+                               noiseFigure;
+        
+                noisePower_dBm = 10*log10(noisePower_W)+30;
+                totalPower_W = totalPower_W + noisePower_W;
+                totalPower_dBm = 10*log10(totalPower_W)+30;
+                fprintf("    Noise : %.2f dBm\n", noisePower_dBm);
+                fprintf("    Total : %.2f dBm\n\n", totalPower_dBm);
+            end
+            fprintf("==============================================\n");
+        
+        end
+
+
     end
 
 end

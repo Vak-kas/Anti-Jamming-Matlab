@@ -1,6 +1,6 @@
 %% ==================== Simulation Parameters ====================
 reconnaissanceDuration = 1;
-numTimeSlots = 1000;
+numTimeSlots = 10;
 useAgent = false;
 
 %% ==================== System Parameters ====================
@@ -47,6 +47,8 @@ satelliteRxGain_dBi = 30;      % Set-1
 satelliteGOverT_dB = 1.1;       % Set-1
 
 
+%% ==================== DRL Parameters ====================
+phi = 10;
 
 
 

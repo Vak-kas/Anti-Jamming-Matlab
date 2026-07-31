@@ -13,6 +13,13 @@ classdef TimeSlot
 
         
         function result = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
+            %% 0. 채널 센싱
+            for utIndex = 1:numel(UTs)
+                observation = UTs(utIndex).ObservationManager.observe(ServiceChannels, UTs);
+            end
+
+            % DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
+            
             %% 1. 채널 초기화
             obj.clearChannels(ServiceChannels, ControlChannels);
 

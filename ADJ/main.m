@@ -21,7 +21,7 @@ for n = 1:numUTs
 
     isTarget = (n== targetUTId);
 
-    UTs(n) = UT(n, utPosition, utTxPower_dBm, isTarget);
+    UTs(n) = UT(n, utPosition, utTxPower_dBm, isTarget, K, phi);
 end
 
 % Satellite 생성
@@ -51,7 +51,7 @@ y = targetPosition(2) + targetJammerDistance * sin(theta);
 z = 0;
 
 apjPosition = [x, y, z];
-APJ = APJ(1001, apjPosition, apjTxPower_dBm, targetUTId, APJsinrThreshold_db);
+APJ = APJ(1001, apjPosition, apjTxPower_dBm, targetUTId, APJsinrThreshold_db, K, phi);
 
 
 % 좌표 표시
