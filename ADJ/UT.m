@@ -4,6 +4,7 @@ classdef UT < Node
         SelectedChannel
 
         ObservationManager
+        Agent
     end
 
     methods
@@ -16,6 +17,7 @@ classdef UT < Node
             obj.NoiseFigure_dB = 7;
 
             obj.ObservationManager = ObservationManager(obj, numChannels, phi);
+            obj.Agent = UTAgent(obj);
         end
 
         % ========== HARQ값 수신 ========== %
