@@ -2,87 +2,132 @@ classdef DebugHelper
 
     methods (Static)
 
-        %% UT-Satellite 거리 체크용 
+        % ========== Time Slot 출력 ==========
+        function printTimeSlot(slotIndex)
+
+            fprintf("\n");
+            fprintf("------------------------------------------------------------\n");
+            fprintf("Time Slot %d\n", slotIndex);
+            fprintf("------------------------------------------------------------\n");
+
+        end
+
+
+        % ========== UT-Satellite 거리 출력 ==========
         function printAssociationDistances(UTs, Satellites)
-            fprintf('\n');
-            fprintf('========== UT-Satellite Distance ==========\n');
 
-            for n = 1:numel(Satellites)
-                utId = Satellites(n).AssociatedUTId;
-                distance = UTs(utId).distanceTo(Satellites(n));
-                fprintf(['Satellite %d - UT %d | ' ...
-                         'Distance: %.2f km\n'], ...
-                    Satellites(n).Id, ...
+            fprintf("\n[UT-Satellite Distance]\n");
+
+            for satelliteIndex = 1:numel(Satellites)
+
+                utId = Satellites(satelliteIndex).AssociatedUTId;
+
+                distance_m = ...
+                    UTs(utId).distanceTo(Satellites(satelliteIndex));
+
+                fprintf( ...
+                    "  Satellite %2d - UT %2d | Distance: %.2f km\n", ...
+                    Satellites(satelliteIndex).Id, ...
                     utId, ...
-                    distance / 1e3);
+                    distance_m / 1e3);
             end
 
-            fprintf('===========================================\n');
+            fprintf("\n");
         end
 
-        %% 채널 출력
+
+        % ========== 채널 정보 출력 ==========
         function printChannels(ServiceChannels, ControlChannels)
-            fprintf('\n========== Channel Information ==========\n');
-            fprintf('\n[Service Channels]\n');
-        
-            for k = 1:numel(ServiceChannels)
-                fprintf('Channel %2d\n', ServiceChannels(k).Id);
-                packets = ServiceChannels(k).Packets;
-        
-                if isempty(packets)
-                    fprintf('    (Empty)\n');
-                    continue;
-                end
-        
-                for p = 1:numel(packets)
-                    packet = packets(p);
-        
-                    fprintf('    %s | %s %d -> %s %d\n', ...
-                        string(packet.Type), ...
-                        string(packet.SourceType), packet.SourceId, ...
-                        string(packet.DestinationType), packet.DestinationId);
-        
-                end
-        
-            end
-        
-            fprintf('\n[Control Channels]\n');
 
-            for k = 1:numel(ControlChannels)
-                fprintf('Channel %2d\n', ControlChannels(k).Id);
-                packets = ControlChannels(k).Packets;
-        
+            fprintf("\n[Channel Information]\n");
+
+            fprintf("  Service Channels\n");
+
+            for channelIndex = 1:numel(ServiceChannels)
+
+                channel = ServiceChannels(channelIndex);
+                packets = channel.getPackets();
+
+                fprintf("    Channel %2d", channel.Id);
+
                 if isempty(packets)
-                    fprintf('    (Empty)\n');
+                    fprintf(" : Empty\n");
                     continue;
                 end
-        
-                for p = 1:numel(packets)
-                    packet = packets(p);
-                    fprintf('    %s | %s %d -> %s %d\n', ...
-                        string(packet.Type), ...
-                        string(packet.SourceType), packet.SourceId, ...
-                        string(packet.DestinationType), packet.DestinationId);
+
+                fprintf("\n");
+
+                for packetIndex = 1:numel(packets)
+
+                    packet = packets(packetIndex);
+
+                    fprintf( ...
+                        "      %s | %s %d -> %s %d\n", ...
+                        char(string(packet.Type)), ...
+                        char(string(packet.SourceType)), ...
+                        packet.SourceId, ...
+                        char(string(packet.DestinationType)), ...
+                        packet.DestinationId);
                 end
-        
             end
-        
-            fprintf('=========================================\n');
-        
+
+            fprintf("\n");
+            fprintf("  Control Channels\n");
+
+            for channelIndex = 1:numel(ControlChannels)
+
+                channel = ControlChannels(channelIndex);
+                packets = channel.getPackets();
+
+                fprintf("    Channel %2d", channel.Id);
+
+                if isempty(packets)
+                    fprintf(" : Empty\n");
+                    continue;
+                end
+
+                fprintf("\n");
+
+                for packetIndex = 1:numel(packets)
+
+                    packet = packets(packetIndex);
+
+                    fprintf( ...
+                        "      %s | %s %d -> %s %d\n", ...
+                        char(string(packet.Type)), ...
+                        char(string(packet.SourceType)), ...
+                        packet.SourceId, ...
+                        char(string(packet.DestinationType)), ...
+                        packet.DestinationId);
+                end
+            end
+
+            fprintf("\n");
         end
 
 
-        %% SINR 디버깅 출력
+        % ========== SINR 출력 ==========
+        function printSINR( ...
+                satelliteId, ...
+                targetUTId, ...
+                channelId, ...
+                distance_m, ...
+                receivedPower_W, ...
+                interferencePower_W, ...
+                noisePower_W, ...
+                SINR_linear, ...
+                SINR_dB, ...
+                threshold_dB)
 
-        function printSINR(satelliteId, targetUTId, channelId, distance_m, receivedPower_W, interferencePower_W, noisePower_W, ...
-                SINR_linear, SINR_dB, threshold_dB)
+            receivedPower_dBm = ...
+                DebugHelper.wattToDbm(receivedPower_W);
 
-            receivedPower_dBm = DebugHelper.wattToDbm(receivedPower_W);
-            noisePower_dBm = DebugHelper.wattToDbm(noisePower_W);
+            noisePower_dBm = ...
+                DebugHelper.wattToDbm(noisePower_W);
 
             if interferencePower_W > 0
-                interferencePower_dBm = DebugHelper.wattToDbm(interferencePower_W);
-
+                interferencePower_dBm = ...
+                    DebugHelper.wattToDbm(interferencePower_W);
             else
                 interferencePower_dBm = -Inf;
             end
@@ -93,41 +138,50 @@ classdef DebugHelper
                 result = "NACK";
             end
 
-            fprintf('\n');
-            fprintf('========== SINR Debug ==========\n');
-            fprintf('Satellite ID       : %d\n', satelliteId);
-            fprintf('Target UT ID       : %d\n', targetUTId);
-            fprintf('Channel ID         : %d\n', channelId);
-            fprintf('Distance           : %.2f km\n', distance_m / 1e3);
-            fprintf('Desired Power      : %.4e W | %.4f dBm\n', receivedPower_W, receivedPower_dBm);
+            fprintf("\n[SINR Debug | Satellite %d, UT %d]\n", ...
+                satelliteId, targetUTId);
+
+            fprintf("  Channel            : %d\n", channelId);
+            fprintf("  Distance           : %.2f km\n", ...
+                distance_m / 1e3);
+
+            fprintf("  Desired Power      : %.4e W | %.4f dBm\n", ...
+                receivedPower_W, receivedPower_dBm);
 
             if interferencePower_W > 0
-                fprintf('Interference Power : %.4e W | %.4f dBm\n',interferencePower_W, interferencePower_dBm);
+                fprintf("  Interference Power : %.4e W | %.4f dBm\n", ...
+                    interferencePower_W, interferencePower_dBm);
             else
-                fprintf('Interference Power : 0 W | -Inf dBm\n');
+                fprintf("  Interference Power : 0 W | -Inf dBm\n");
             end
 
-            fprintf('Noise Power        : %.4e W | %.4f dBm\n',noisePower_W, noisePower_dBm);
-            fprintf('SINR Linear        : %.4e\n', SINR_linear);
-            fprintf('SINR dB            : %.4f dB\n', SINR_dB);
-            fprintf('Threshold          : %.4f dB\n', threshold_dB);
-            fprintf('HARQ Result        : %s\n', result);
-            fprintf('================================\n');
+            fprintf("  Noise Power        : %.4e W | %.4f dBm\n", ...
+                noisePower_W, noisePower_dBm);
 
+            fprintf("  SINR Linear        : %.4e\n", SINR_linear);
+            fprintf("  SINR               : %.4f dB\n", SINR_dB);
+            fprintf("  Threshold          : %.4f dB\n", threshold_dB);
+            fprintf("  HARQ Result        : %s\n", char(result));
+
+            fprintf("\n");
         end
 
-        %% W -> dBm 변환
+
+        % ========== W -> dBm 변환 ==========
         function power_dBm = wattToDbm(power_W)
+
             if power_W > 0
                 power_dBm = 10 * log10(power_W) + 30;
             else
                 power_dBm = -Inf;
             end
+
         end
 
 
         % ========== APJ HARQ 예측 결과 출력 ==========
         function printHARQPredictionResult(TP, FN, FP, TN)
+
             total = TP + TN + FP + FN;
 
             if total == 0
@@ -151,91 +205,196 @@ classdef DebugHelper
             if (precision + recall) == 0
                 f1Score = 0;
             else
-                f1Score = 2 * precision * recall / (precision + recall);
+                f1Score = ...
+                    2 * precision * recall / (precision + recall);
             end
 
-            fprintf("\n========== APJ HARQ Prediction Result ==========\n");
-            fprintf("TP : %d\n", TP);
-            fprintf("FN : %d\n", FN);
-            fprintf("FP : %d\n", FP);
-            fprintf("TN : %d\n", TN);
-            fprintf("-----------------------------------------------\n");
-            fprintf("Accuracy  : %.4f\n", accuracy);
-            fprintf("Precision : %.4f\n", precision);
-            fprintf("Recall    : %.4f\n", recall);
-            fprintf("F1 Score  : %.4f\n", f1Score);
-            fprintf("================================================\n");
+            fprintf("\n");
+            fprintf("------------------------------------------------------------\n");
+            fprintf("APJ HARQ Prediction Result\n");
+            fprintf("------------------------------------------------------------\n");
+
+            fprintf("  TP        : %d\n", TP);
+            fprintf("  FN        : %d\n", FN);
+            fprintf("  FP        : %d\n", FP);
+            fprintf("  TN        : %d\n", TN);
+
+            fprintf("\n");
+
+            fprintf("  Accuracy  : %.4f\n", accuracy);
+            fprintf("  Precision : %.4f\n", precision);
+            fprintf("  Recall    : %.4f\n", recall);
+            fprintf("  F1 Score  : %.4f\n", f1Score);
+
+            fprintf("------------------------------------------------------------\n");
         end
 
-         % ========== Satellite 정보 출력 ==========
+
+        % ========== Satellite 정보 출력 ==========
         function printSatelliteInfo(satellite)
-            fprintf("\n");
-            fprintf("========== Satellite %d ==========\n", satellite.Id);
-            fprintf("Rx Gain                : %.1f dBi\n", satellite.SatelliteRxGain_dBi);
-            fprintf("G/T                    : %.1f dB/K\n", satellite.SatelliteGOverT_dB);
-            fprintf("System Noise Temp.     : %.2f K\n", satellite.SystemNoiseTemperature_K);
-            fprintf("Tx Power               : %.2f dBm\n", satellite.TxPower_dBm);
-            fprintf("Associated UT          : %d\n", satellite.AssociatedUTId);
-            fprintf("SINR Threshold         : %.2f dB\n", satellite.Threshold);
-            fprintf("Position               : (%.2f, %.2f, %.2f) m\n", ...
+
+            fprintf("\n[Satellite %d Information]\n", satellite.Id);
+
+            fprintf("  Rx Gain            : %.1f dBi\n", ...
+                satellite.SatelliteRxGain_dBi);
+
+            fprintf("  G/T                : %.1f dB/K\n", ...
+                satellite.SatelliteGOverT_dB);
+
+            fprintf("  System Noise Temp. : %.2f K\n", ...
+                satellite.SystemNoiseTemperature_K);
+
+            fprintf("  Tx Power           : %.2f dBm\n", ...
+                satellite.TxPower_dBm);
+
+            fprintf("  Associated UT      : %d\n", ...
+                satellite.AssociatedUTId);
+
+            fprintf("  SINR Threshold     : %.2f dB\n", ...
+                satellite.Threshold);
+
+            fprintf("  Position           : (%.2f, %.2f, %.2f) m\n", ...
                 satellite.Position(1), ...
                 satellite.Position(2), ...
                 satellite.Position(3));
-            fprintf("=================================\n\n");
-    
+
+            fprintf("\n");
         end
 
 
-        % ========== 센싱 출력 ==========
+        % ========== 채널 센싱 출력 ==========
         function printObservation(owner, ServiceChannels, UTs)
-            fprintf("\n========== Observation Debug (UT %d) ==========\n", owner.Id);
-        
-            for ch = 1:numel(ServiceChannels)
-                fprintf("Channel %2d\n", ch);
-                channel = ServiceChannels(ch);
+
+            fprintf("\n[Observation | UT %d]\n", owner.Id);
+
+            for channelIndex = 1:numel(ServiceChannels)
+
+                channel = ServiceChannels(channelIndex);
                 packets = channel.getPackets();
-        
-                totalPower_W = 0;
-        
-                for p = 1:numel(packets)
-                    packet = packets(p);
-        
-                    if packet.SourceId == owner.Id
+
+                totalSignalPower_W = 0;
+                signalCount = 0;
+
+                fprintf("  Channel %2d\n", channel.Id);
+
+                for packetIndex = 1:numel(packets)
+
+                    packet = packets(packetIndex);
+
+                    % 자신의 송신 신호 제외
+                    if packet.SourceId == owner.Id && ...
+                            packet.SourceType == owner.Type
                         continue;
                     end
-        
+
                     sourceNode = UTs(packet.SourceId);
+
                     lambda = 3e8 / channel.CenterFrequency_Hz;
-                    distance = owner.distanceTo(sourceNode);
-                    h = (lambda/(4*pi*distance))^2;
-                    txPower_W = 10^((sourceNode.TxPower_dBm-30)/10);
-                    rxPower_W = txPower_W*h;
-        
-                    rxPower_dBm = 10*log10(rxPower_W)+30;
-                    totalPower_W = totalPower_W + rxPower_W;
-        
-                    fprintf("    TX : UT %d\n", packet.SourceId);
-                    fprintf("        Distance : %.2f km\n", distance/1000);
-                    fprintf("        Rx Power : %.2f dBm\n", rxPower_dBm);
-        
+                    distance_m = owner.distanceTo(sourceNode);
+
+                    channelGain = ...
+                        (lambda / (4 * pi * distance_m))^2;
+
+                    txPower_W = ...
+                        10^((sourceNode.TxPower_dBm - 30) / 10);
+
+                    rxPower_W = txPower_W * channelGain;
+                    rxPower_dBm = DebugHelper.wattToDbm(rxPower_W);
+
+                    totalSignalPower_W = ...
+                        totalSignalPower_W + rxPower_W;
+
+                    signalCount = signalCount + 1;
+
+                    fprintf( ...
+                        "    UT %2d | Distance: %6.2f km | Rx: %8.2f dBm\n", ...
+                        packet.SourceId, ...
+                        distance_m / 1e3, ...
+                        rxPower_dBm);
                 end
-        
-                noiseFigure = 10^(owner.NoiseFigure_dB/10);
-                noisePower_W = owner.k * ...
-                               owner.NoiseTemperature * ...
-                               channel.Bandwidth_Hz * ...
-                               noiseFigure;
-        
-                noisePower_dBm = 10*log10(noisePower_W)+30;
-                totalPower_W = totalPower_W + noisePower_W;
-                totalPower_dBm = 10*log10(totalPower_W)+30;
-                fprintf("    Noise : %.2f dBm\n", noisePower_dBm);
-                fprintf("    Total : %.2f dBm\n\n", totalPower_dBm);
+
+                noiseFactor = ...
+                    10^(owner.NoiseFigure_dB / 10);
+
+                noisePower_W = ...
+                    owner.k * ...
+                    owner.NoiseTemperature * ...
+                    channel.Bandwidth_Hz * ...
+                    noiseFactor;
+
+                noisePower_dBm = ...
+                    DebugHelper.wattToDbm(noisePower_W);
+
+                totalPower_W = ...
+                    totalSignalPower_W + noisePower_W;
+
+                totalPower_dBm = ...
+                    DebugHelper.wattToDbm(totalPower_W);
+
+                if signalCount == 0
+                    fprintf("    Signal : None\n");
+                end
+
+                fprintf("    Noise  : %.2f dBm\n", noisePower_dBm);
+                fprintf("    Total  : %.2f dBm\n", totalPower_dBm);
             end
-            fprintf("==============================================\n");
-        
+
+            fprintf("\n");
         end
 
+
+        % ========== UT 채널 선택 과정 출력 ==========
+        function printUTActionSelection( ...
+                ownerId, ...
+                selectionMethod, ...
+                epsilon, ...
+                randomValue, ...
+                action, ...
+                qValues)
+
+            fprintf("\n[Action Selection | UT %d]\n", ownerId);
+
+            fprintf("  Method           : %s\n", ...
+                char(selectionMethod));
+
+            fprintf("  Epsilon          : %.6f\n", epsilon);
+            fprintf("  Random Value     : %.6f\n", randomValue);
+            fprintf("  Selected Channel : %d\n", action);
+
+            if strcmp(selectionMethod, "DQN")
+
+                fprintf("\n");
+                fprintf("  Q-values\n");
+
+                for channelIndex = 1:numel(qValues)
+
+                    fprintf("    Ch %2d : %9.4f\n", ...
+                        channelIndex, ...
+                        qValues(channelIndex));
+                end
+
+                [maxQValue, maxChannel] = max(qValues);
+
+                fprintf("\n");
+                fprintf("  Best Channel     : %d\n", maxChannel);
+                fprintf("  Maximum Q-value  : %.6f\n", maxQValue);
+            end
+
+            fprintf("\n");
+        end
+
+
+        % ========== Reward 출력 ==========
+        function printReward(ownerId, reward, isACK)
+            fprintf("\n[Reward | UT %d]\n", ownerId);
+            if isACK
+                fprintf("  HARQ Result      : ACK\n");
+            else
+                fprintf("  HARQ Result      : NACK\n");
+            end
+            fprintf("  Reward           : %.2f\n", reward);
+            fprintf("\n");
+        end
 
     end
 
