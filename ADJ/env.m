@@ -1,7 +1,8 @@
 %% ==================== Simulation Parameters ====================
 reconnaissanceDuration = 1;
 numTimeSlots = 10;
-useAgent = false;
+useAgent = true;
+isDebug = true;
 
 %% ==================== System Parameters ====================
 serviceBandStart_Hz = 1980e6;
@@ -47,8 +48,52 @@ satelliteRxGain_dBi = 30;      % Set-1
 satelliteGOverT_dB = 1.1;       % Set-1
 
 
-%% ==================== DRL Parameters ====================
+%% ==================== COMMON DRL Parameters ====================
 phi = 10;
+
+
+%% ==================== UT DRL Parameters ====================
+utBatchSize = 32;
+
+utLearnRate = 0.001;
+utDiscountFactor = 0.8;
+
+utReplayBufferCapacity = 10000;
+
+
+% Epsilon-greedy
+utEpsilon = 1.000;
+utEpsilonMin = 0.995;
+utEpsilonDecay = 0.001;
+
+utTargetUpdateFrequency = 100;
+
+
+utSuccessReward = 5;
+utFailureReward = -1;
+utRewardFunction = @(isACK) double(isACK) * utSuccessReward + double(~isACK) * utFailureReward;
+
+
+
+%% ==================== APJ DRL Parameters ====================
+apjBatchSize = 32;
+
+apjLearnRate = 0.001;
+apjDiscountFactor = 0.8;
+
+apjReplayBufferCapacity = 10000;
+
+% Epsilon-greedy
+apjEpsilon = 1.000;
+apjEpsilonMin = 0.001;
+apjEpsilonDecay = 0.995;
+
+apjTargetUpdateFrequency = 100;
+
+
+apjSuccessReward = 1;
+apjFailureReward = -1;
+apjRewardFunction = @(targetACK) double(~targetACK) * apjSuccessReward + double(targetACK) * apjFailureReward;
 
 
 

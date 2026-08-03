@@ -2,6 +2,7 @@ classdef TimeSlot
     properties
         UseAgent
         ReconnaissanceDuration
+        Debug
     end
 
     methods
@@ -9,26 +10,44 @@ classdef TimeSlot
             env;
             obj.UseAgent  = useAgent;
             obj.ReconnaissanceDuration = reconnaissanceDuration;
+            obj.Debug = isDebug;
         end
 
         
         function result = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
-            %% 0. 채널 센싱
-            for utIndex = 1:numel(UTs)
-                observation = UTs(utIndex).ObservationManager.observe(ServiceChannels, UTs);
+            %% ========== Time Slot Debug ==========
+            if obj.Debug
+                fprintf("\n");
+                fprintf("==================================================\n");
+                fprintf("                  TIME SLOT %d\n", slotIndex);
+                fprintf("==================================================\n");
             end
 
-            % DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
+
+            %% 0. 채널 센싱 및 이전 Transition 완성
+            for utIndex = 1:numel(UTs)
+                observation = UTs(utIndex).ObservationManager.observe(ServiceChannels, UTs); %O_t
+                UTs(utIndex).Agent.setCurrentState(observation);
+                UTs(utIndex).Agent.completeTransition();
+            end
+            DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
+
+            %% 1. DQN 학습
+
+
             
-            %% 1. 채널 초기화
+            %% 2. 채널 초기화
             obj.clearChannels(ServiceChannels, ControlChannels);
 
 
-            %% 2. UT의 랜덤 채널 선택
+            %% 3. UT의 채널 선택
             for utIndex = 1:numel(UTs)
                 if obj.UseAgent
-                    % TODO - DQN 적용 예정
-                    selectedChannel = UTs(utIndex).Agent.selectAction();
+                    if utIndex == 1
+                        selectedChannel = UTs(utIndex).Agent.selectAction(obj.Debug); %a_t
+                    else
+                        selectedChannel = UTs(utIndex).Agent.selectAction();
+                    end
                 else
                     selectedChannel = randi(numel(ServiceChannels));
                 end
@@ -37,7 +56,7 @@ classdef TimeSlot
             end
 
 
-            %% 3. Data 패킷 생성
+            %% 4. UT의 Data를 Service 채널에 데이터 전송
             dataPackets = cell(1, numel(UTs));
             for utIndex = 1:numel(UTs)
                 selectedChannel = UTs(utIndex).SelectedChannel;
@@ -45,7 +64,6 @@ classdef TimeSlot
             end
 
 
-            %% 4. Service Channel에 Data 패킷 추가
             for utIndex = 1:numel(UTs)
                 selectedChannel = dataPackets{utIndex}.ChannelId;
                 ServiceChannels(selectedChannel).addPacket(dataPackets{utIndex});
@@ -77,7 +95,7 @@ classdef TimeSlot
             % DebugHelper.printChannels(ServiceChannels, ControlChannels);
 
 
-            %% 7. UT & APJ의 결과 확인 DQN 학습
+            %% 7. UT & APJ의 결과 확인 및 reward 저장
             % UT의 성공 여부 확인
             actualACK = zeros(1, numel(UTs));
             for utIndex = 1:numel(UTs)
@@ -86,14 +104,17 @@ classdef TimeSlot
             actualTargetACK = actualACK(1);
 
             if obj.UseAgent
-                % TODO - DQN 적용 예정
-            else
+                for utIndex = 1:numel(UTs)
+                    UTs(utIndex).Agent.setReward(actualACK(utIndex));
+
+                    if obj.Debug && utIndex ==1
+                        DebugHelper.printReward(UTs(utIndex).Id, UTs(utIndex).Agent.PendingReward, actualACK(utIndex));
+                    end
+                end
             end
 
             % APJ가 성공 여부 확인
             estimatedACK = apjNode.estimateHARQ(ServiceChannels, UTs);
-
-            
 
 
             %% 결과 반환
