@@ -1,15 +1,15 @@
 %% ==================== Simulation Parameters ====================
 reconnaissanceDuration = 1;
-numTimeSlots = 10;
+numTimeSlots = 1000;
 useAgent = true;
-isDebug = true;
+isDebug = false;
 
 %% ==================== System Parameters ====================
 serviceBandStart_Hz = 1980e6;
 serviceBandEnd_Hz = 2010e6;
 
 numSatellites = 10; % Number of satellites
-numUTs = 10; % Number of UTs
+numUTs = numSatellites; % Number of UTs
 K = 10; % Number of service channels
 numAPJ = 1;% Number of APJs
 
@@ -63,8 +63,8 @@ utReplayBufferCapacity = 10000;
 
 % Epsilon-greedy
 utEpsilon = 1.000;
-utEpsilonMin = 0.995;
-utEpsilonDecay = 0.001;
+utEpsilonMin = 0.05;
+utEpsilonDecay = 0.997;
 
 utTargetUpdateFrequency = 100;
 

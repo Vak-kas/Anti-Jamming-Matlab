@@ -14,14 +14,9 @@ classdef TimeSlot
         end
 
         
-        function result = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
-            %% ========== Time Slot Debug ==========
-            if obj.Debug
-                fprintf("\n");
-                fprintf("==================================================\n");
-                fprintf("                  TIME SLOT %d\n", slotIndex);
-                fprintf("==================================================\n");
-            end
+        function [result, actualTargetACK] = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
+
+            % DebugHelper.printTimeSlot(slotIndex);
 
 
             %% 0. 채널 센싱 및 이전 Transition 완성
@@ -30,9 +25,21 @@ classdef TimeSlot
                 UTs(utIndex).Agent.setCurrentState(observation);
                 UTs(utIndex).Agent.completeTransition();
             end
-            DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
+
+            % DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
+            % DebugHelper.printObservation(UTs(2), ServiceChannels, UTs);
 
             %% 1. DQN 학습
+            if obj.UseAgent
+                for utIndex = 1:numel(UTs)
+                    lossValue = UTs(utIndex).Agent.train();
+                    
+                    % UT 1만 학습 과정 출력
+                    if obj.Debug && utIndex == 1 && ~isempty(lossValue)
+                        DebugHelper.printTraining(UTs(utIndex).Id, UTs(utIndex).Agent.ReplayBuffer.Count, UTs(utIndex).Agent.TrainingStep, lossValue);
+                    end
+                end
+            end
 
 
             
@@ -46,7 +53,8 @@ classdef TimeSlot
                     if utIndex == 1
                         selectedChannel = UTs(utIndex).Agent.selectAction(obj.Debug); %a_t
                     else
-                        selectedChannel = UTs(utIndex).Agent.selectAction();
+                        % selectedChannel = UTs(utIndex).Agent.selectAction();
+                        selectedChannel = randi(numel(ServiceChannels));
                     end
                 else
                     selectedChannel = randi(numel(ServiceChannels));

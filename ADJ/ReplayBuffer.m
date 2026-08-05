@@ -46,6 +46,51 @@ classdef ReplayBuffer < handle
             obj.Count = min(obj.Count+1, obj.Capacity);
             obj.Position = mod(obj.Position, obj.Capacity) + 1;
         end
+
+
+        % ========== Mini-Batch 무작위 추출 ==========
+        function batch = sample(obj, batchSize)
+
+            % 저장된 Transition이 BatchSize보다 적으면 학습 불가능
+            if obj.Count < batchSize
+                batch = [];
+                return;
+            end
+
+            indices = randperm(obj.Count, batchSize); %전체 중 batchSize개수 만큼 뽑기
+            numRows = size(obj.States, 1);
+            numCols = size(obj.States, 2);
+
+            % O_t
+            sampledStates = obj.States(:, :, indices);
+            sampledStates = reshape(sampledStates, numRows, numCols, 1, batchSize);
+
+            % a_t
+            sampledActions = obj.Actions(indices);
+
+            % r_t
+            sampledRewards = obj.Rewards(indices);
+
+            % O_{t+1}
+            sampledNextStates = obj.NextStates(:, :, indices);
+            sampledNextStates = reshape(sampledNextStates, numRows, numCols, 1, batchSize);
+
+            
+
+            batch = struct('States', sampledStates, 'Actions', sampledActions,'Rewards', sampledRewards, 'NextStates', sampledNextStates);
+
+            
+            % ============= 최종 리턴 사이즈 =================
+            % batch.States      : phi × K × 1 × BatchSize
+            % batch.Actions     : BatchSize × 1
+            % batch.Rewards     : BatchSize × 1
+            % batch.NextStates  : phi × K × 1 × BatchSize
+
+            % batch.Indices     : 1 × BatchSize
+            % ============================================%
+
+
+        end
     end
 
 end

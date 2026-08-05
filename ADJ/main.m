@@ -84,29 +84,89 @@ end
 %% ==================== Time Slot 마다 수행 ====================
 timeSlot = TimeSlot();
 
+targetACKHistory = zeros(1, numTimeSlots);
+
 TP = 0;
 FN = 0;
 FP = 0;
 TN = 0;
 
-for i = 1:numTimeSlots
-    result = timeSlot.run(i, UTs, Satellites, APJ, ServiceChannels, ControlChannels);
+for slotIndex = 1:numTimeSlots
 
+    [result, actualTargetACK] = timeSlot.run( ...
+        slotIndex, ...
+        UTs, ...
+        Satellites, ...
+        APJ, ...
+        ServiceChannels, ...
+        ControlChannels);
+
+    % APJ HARQ 예측 결과 누적
     switch result
         case 0
             TP = TP + 1;
+
         case 1
             FN = FN + 1;
+
         case 2
             FP = FP + 1;
+
         case 3
             TN = TN + 1;
+
         otherwise
-            error("알 수 없는 result 값입니다: %d", result);
+            error( ...
+                "Main:UnknownResult", ...
+                "알 수 없는 result 값입니다: %d", ...
+                result);
+    end
+
+    % Target UT의 실제 ACK/NACK 결과 저장
+    targetACKHistory(slotIndex) = actualTargetACK;
+end
+
+
+%% APJ HARQ 예측 결과 출력
+DebugHelper.printHARQPredictionResult(TP, FN, FP, TN);
+
+
+%% 마지막 Transition 완성
+if timeSlot.UseAgent
+    for utIndex = 1:numel(UTs)
+
+        finalObservation = ...
+            UTs(utIndex).ObservationManager.observe( ...
+                ServiceChannels, UTs);
+
+        UTs(utIndex).Agent.setCurrentState(finalObservation);
+        UTs(utIndex).Agent.completeTransition();
+
+        % 마지막 Transition을 포함하여 한 번 더 학습
+        UTs(utIndex).Agent.train();
     end
 end
 
 
-% APJ HARQ 예측 결과 출력
+%% Target UT 성공률 시간 추이
+windowSize = 200;
 
-DebugHelper.printHARQPredictionResult(TP, FN, FP, TN);
+if numTimeSlots < windowSize
+    error( ...
+        "Main:InsufficientTimeSlots", ...
+        "성공률 계산을 위해 numTimeSlots는 최소 %d 이상이어야 합니다.", ...
+        windowSize);
+end
+
+firstACKRate = mean(targetACKHistory(1:windowSize));
+lastACKRate = mean(targetACKHistory(end-windowSize+1:end));
+
+fprintf("\n");
+fprintf("------------------------------------------------------------\n");
+fprintf("Target UT ACK Rate\n");
+fprintf("------------------------------------------------------------\n");
+fprintf("  First %d slots : %.2f %%\n", ...
+    windowSize, firstACKRate * 100);
+fprintf("  Last  %d slots : %.2f %%\n", ...
+    windowSize, lastACKRate * 100);
+fprintf("------------------------------------------------------------\n");

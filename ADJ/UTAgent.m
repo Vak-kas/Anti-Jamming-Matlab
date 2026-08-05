@@ -19,7 +19,7 @@ classdef UTAgent < Agent
 
             inputSize = [phi, K, 1];
             stateSize = [phi, K];
-            
+
             obj.NumActions = K;
 
             obj.QNetwork = obj.createQNetwork(inputSize, obj.NumActions);
@@ -98,10 +98,10 @@ classdef UTAgent < Agent
             layers = [
                 imageInputLayer(inputSize, Normalization="none", Name="spectrum_waterfall_input")
                 
-                convolution2dLayer([3 1], 16, Padding="same", Name="conv1") %특정 채널 하나에 최근 3개의 시간 타임라인
+                convolution2dLayer([3 3], 16, Padding="same", Name="conv1") %특정 채널 하나에 최근 3개의 시간 타임라인
                 reluLayer(name="relu1")
 
-                convolution2dLayer([3 1], 32, Padding="same", Name="conv2")
+                convolution2dLayer([3 3], 32, Padding="same", Name="conv2")
                 reluLayer(Name="relu2")
                 
                 fullyConnectedLayer(128, Name="fc1")

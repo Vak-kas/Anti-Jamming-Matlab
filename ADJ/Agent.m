@@ -18,8 +18,12 @@ classdef (Abstract) Agent < handle
         PendingAction %a_t
         PendingReward %r_t
 
+        % Adam Optimizer 상태
+        AverageGradients
+        AverageSquaredGradients
 
-        %% APJ / UT에 따른 각각 선언
+
+        %% APJ / UT에 따른 각각 선언
         BatchSize
 
         % Learning parameters
@@ -60,6 +64,9 @@ classdef (Abstract) Agent < handle
         
             % Training
             obj.TrainingStep = 0;
+
+            obj.AverageGradients = [];
+            obj.AverageSquaredGradients = [];
 
         end
 
@@ -102,6 +109,98 @@ classdef (Abstract) Agent < handle
             obj.PendingReward = [];
 
         end
+
+
+        % ========== DQN 학습 ========== %
+        function lossValue = train(obj)
+            
+            lossValue = [];
+
+            % Replay Buffer 확인
+            if isempty(obj.ReplayBuffer)
+                error( "Agent:ReplayBufferNotSet", "ReplayBuffer가 설정되지 않았습니다.");
+            end
+
+
+            % 1. Batch 추출
+            batch = obj.ReplayBuffer.sample(obj.BatchSize);
+
+                % Replay Buffer가 충분히 쌓이지 않았으면 학습하지 않음
+            if isempty(batch)
+                return;
+            end
+
+
+            % 2. Deep Learning 입력 방식으로 변환
+            dlStates = dlarray(batch.States, "SSCB");
+            dlNextStates = dlarray(batch.NextStates, "SSCB");
+            dlRewards = dlarray(reshape(single(batch.Rewards), 1, obj.BatchSize), "CB");
+
+
+            % 3. Target Q-Value 계산 (TargetNetwork 추론 -> max Next Q 추출 -> % Target 계산)
+            dlTargetQValues = obj.calculateTargetQValues(dlNextStates, dlRewards);
+            
+
+            % 4. Current Q 계산 (QNetwork forward -> Action Q 추출), Loss계산, Gradient 계산
+            [loss, gradients] = dlfeval(@(qNetwork, states, actions, targets)  ...
+                obj.modelGradients(qNetwork, states, actions, targets), obj.QNetwork, dlStates, batch.Actions, dlTargetQValues);
+
+
+            % 5. Weight Update
+            obj.TrainingStep = obj.TrainingStep + 1;
+            [obj.QNetwork, obj.AverageGradients, obj.AverageSquaredGradients] = adamupdate( ...
+                obj.QNetwork, gradients, obj.AverageGradients, obj.AverageSquaredGradients, obj.TrainingStep, obj.LearningRate);
+
+
+            % 6. Target Network 갱신
+            if mod(obj.TrainingStep, obj.TargetUpdateFrequency) == 0
+                obj.TargetNetwork = obj.QNetwork;
+            end
+
+
+            lossValue = double(extractdata(loss));
+
+
+
+
+
+
+        end
+
+        % ========== Target Q-Value 계산 ========== %
+        function dlTargetQValues = calculateTargetQValues(obj, dlNextStates, dlRewards)
+            % O_{t+1}에서 각 행동의 Q-value 계산
+            dlNextQValues = predict(obj.TargetNetwork, dlNextStates);
+            dlMaxNextQValues = max(dlNextQValues, [], 1);
+
+            % Bellman Target ->  y_t = r_t + gamma × max_a Q_target(O_{t+1}, a)
+                % 현재 행동의 가치 = 이번 행동으로 즉시 받은 보상 + 다음 상태에서 가장 좋아보이는 행동의 미래 가치
+            dlTargetQValues = dlRewards + single(obj.DiscountFactor) .* dlMaxNextQValues;
+        end
+
+
+        % ========== Current Q, Loss, Gradient 계산 ========== %
+        function [loss, gradients] = modelGradients(obj, qNetwork, dlStates, actions, dlTargetQValues)
+        
+            % Current Q 계산 ->  O_t에서 모든 행동의 Q-Value 계산
+            dlCurrentQValues = forward(qNetwork, dlStates);
+            batchSize = numel(actions);
+
+
+            % 실제 선택했던 Action Q-value 가져오기
+            actions = double(actions(:))';
+            actionIndices = sub2ind([obj.NumActions, batchSize], actions, 1:batchSize);
+            dlSelectedQValues = dlCurrentQValues(actionIndices);
+            dlSelectedQValues = reshape(dlSelectedQValues, 1, batchSize);
+
+            
+            % Loss 계산
+            loss = mean((dlSelectedQValues - dlTargetQValues).^2, "all");
+
+            % Gradient 계산
+            gradients = dlgradient(loss, qNetwork.Learnables);
+        end
+
 
     end
 end

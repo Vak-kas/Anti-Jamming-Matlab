@@ -396,6 +396,16 @@ classdef DebugHelper
             fprintf("\n");
         end
 
+        % ========== DQN 학습 결과 출력 ==========
+        function printTraining(ownerId, replayCount, trainingStep, lossValue)
+        
+            fprintf("\n[Training | UT %d]\n", ownerId);
+            fprintf("  Replay Count  : %d\n", replayCount);
+            fprintf("  Training Step : %d\n", trainingStep);
+            fprintf("  Loss          : %.6f\n", lossValue);
+            fprintf("\n");
+        end
+
     end
 
 end
