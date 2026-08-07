@@ -1,8 +1,8 @@
 %% ==================== Simulation Parameters ====================
 reconnaissanceDuration = 1;
-numTimeSlots = 1000;
+numTimeSlots = 10000;
 useAgent = true;
-isDebug = false;
+isDebug = true;
 
 %% ==================== System Parameters ====================
 serviceBandStart_Hz = 1980e6;

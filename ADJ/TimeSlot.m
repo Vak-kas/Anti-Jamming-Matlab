@@ -16,7 +16,7 @@ classdef TimeSlot
         
         function [result, actualTargetACK] = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
 
-            % DebugHelper.printTimeSlot(slotIndex);
+            DebugHelper.printTimeSlot(slotIndex);
 
 
             %% 0. 채널 센싱 및 이전 Transition 완성
@@ -54,7 +54,8 @@ classdef TimeSlot
                         selectedChannel = UTs(utIndex).Agent.selectAction(obj.Debug); %a_t
                     else
                         % selectedChannel = UTs(utIndex).Agent.selectAction();
-                        selectedChannel = randi(numel(ServiceChannels));
+                        % selectedChannel = randi(numel(ServiceChannels));
+                        selectedChannel = UTs(utIndex).selectRuleBasedChannel();
                     end
                 else
                     selectedChannel = randi(numel(ServiceChannels));
