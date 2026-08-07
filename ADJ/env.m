@@ -2,13 +2,13 @@
 reconnaissanceDuration = 1;
 numTimeSlots = 1000;
 useAgent = true;
-isDebug = false;
+isDebug = true;
 
 %% ==================== System Parameters ====================
 serviceBandStart_Hz = 1980e6;
 serviceBandEnd_Hz = 2010e6;
 
-numSatellites = 10; % Number of satellites
+numSatellites = 5; % Number of satellites
 numUTs = numSatellites; % Number of UTs
 K = 10; % Number of service channels
 numAPJ = 1;% Number of APJs

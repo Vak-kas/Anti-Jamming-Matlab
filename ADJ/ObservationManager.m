@@ -27,7 +27,26 @@ classdef ObservationManager < handle
             obj.CurrentObservation = zeros(1, obj.NumChannels);
             
             for channelIndex = 1:numel(channels)
-                obj.CurrentObservation(channelIndex) = obj.measureChannelPower_dBm(channels(channelIndex), UTs);
+                % 채널 총 수신 전력
+                totalPower_dBm = obj.measureChannelPower_dBm(channels(channelIndex), UTs);
+
+                % 2. 해당 채널 Noise Floor [dBm]
+                noisePower_W = obj.calculateNoisePower(channels(channelIndex).Bandwidth_Hz);
+                noisePower_dBm = 10 * log10(noisePower_W) + 30;
+        
+                % 3. Noise Floor 대비 초과 전력 [dB]
+                excessPower_dB = totalPower_dBm - noisePower_dBm;
+        
+
+                % 4. 0 ~ 25 dB 범위로 clipping
+                maxExcessPower_dB = 25;
+                excessPower_dB = max(0, min(excessPower_dB, maxExcessPower_dB));
+        
+                % 5. 0 ~ 1 정규화
+                normalizedPower = excessPower_dB / maxExcessPower_dB;
+                obj.CurrentObservation(channelIndex) = normalizedPower;
+
+                % obj.CurrentObservation(channelIndex) = obj.measureChannelPower_dBm(channels(channelIndex), UTs);
             end
 
             % 히스토리 저장

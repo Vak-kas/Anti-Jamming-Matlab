@@ -1,5 +1,7 @@
 classdef UTAgent < Agent
     properties
+        ActionHistory % phi x k
+        ACKHistory % phi x k
     end
 
     methods
@@ -7,6 +9,9 @@ classdef UTAgent < Agent
         function obj = UTAgent(owner)
             env;
             obj@Agent(owner);
+
+            obj.ActionHistory = zeros(phi, K, "single");
+            obj.ACKHistory = zeros(phi, K, "single");
 
             obj.BatchSize = utBatchSize;
 
@@ -17,8 +22,8 @@ classdef UTAgent < Agent
             obj.EpsilonMin = utEpsilonMin;
             obj.EpsilonDecay = utEpsilonDecay;
 
-            inputSize = [phi, K, 1];
-            stateSize = [phi, K];
+            inputSize = [phi, K, 3];
+            stateSize = inputSize;
 
             obj.NumActions = K;
 
@@ -64,7 +69,7 @@ classdef UTAgent < Agent
 
                 % phi × K -> phi × K × 1 × 1
                 state = single(obj.CurrentState);
-                state = reshape(state, size(state, 1), size(state, 2), 1);
+                state = reshape(state, size(state, 1), size(state, 2), size(state, 3), 1);
 
                 % CNN 입력 차원 결정
                 dlState = dlarray(state, "SSCB");
@@ -91,6 +96,29 @@ classdef UTAgent < Agent
             obj.PendingState = obj.CurrentState;
             obj.PendingAction = action;
         end
+            
+        % ========== 상태 저장 ========== %
+        function setCurrentState(obj, observation)
+            % Observation 크기 확인
+
+            if ~isequal(size(observation), size(obj.ActionHistory))
+                error("UTAgent:InvalidObservationSize","Observation과 History 크기가 일치하지 않습니다.");
+            end
+        
+            % S_t = [O_t, A_t, H_t]
+            % 크기: phi × K × 3
+            obj.CurrentState = cat(3, single(observation), obj.ActionHistory, obj.ACKHistory);
+        end
+
+
+
+         % ========== 보상 등록 및 이력 업데이트========== %
+        function setReward(obj, outcome)
+            setReward@Agent(obj, outcome);
+            obj.updateHistory(obj.PendingAction, obj.PendingReward);
+        end
+
+
     end
 
     methods (Access = private)
@@ -112,6 +140,38 @@ classdef UTAgent < Agent
 
             network = dlnetwork(layers);
         end
+
+
+        function updateHistory(obj, action, reward)
+            % History 크기 확인
+            if isempty(obj.ActionHistory) || isempty(obj.ACKHistory)
+                error("UTAgent:HistoryNotInitialized", "ActionHistory와 ACKHistory가 초기화되지 않았습니다.");
+            end
+
+            newActionsRow = zeros(1, obj.NumActions, "single");
+            newActionsRow(action) = 1;
+
+            newACKRow = zeros(1, obj.NumActions, "single");
+            if reward > 0
+                newACKRow(action) = 1;
+            else
+                newACKRow(action) = -1;
+            end
+
+            % 최신을 맨 위에 삽입
+            obj.ActionHistory = [
+                newActionsRow
+                obj.ActionHistory(1:end-1,:)
+            ];
+            
+            obj.ACKHistory = [
+                newACKRow
+                obj.ACKHistory(1:end-1,:)
+            ];
+
+        end
     end
+
+
 
 end
