@@ -91,6 +91,25 @@ classdef UTAgent < Agent
             obj.PendingState = obj.CurrentState;
             obj.PendingAction = action;
         end
+
+
+        % ========== 현재 DQN의 Greedy Action 반환 ========== %
+        function [greedyChannel, qValues] = getGreedyAction(obj)
+            if isempty(obj.CurrentState)
+                error("UTAgent:EmptyCurrentState", "Greedy Action 계산 전에 CurrentState를 설정해야 합니다.");
+            end
+        
+            state = single(obj.CurrentState);
+            state = reshape(state, size(state, 1), size(state, 2), 1, 1);
+        
+            dlState = dlarray(state, "SSCB");
+            dlQValues = predict(obj.QNetwork, dlState);
+            qValues = extractdata(dlQValues);
+            qValues = double(qValues(:));
+        
+            [~, greedyChannel] = max(qValues);
+            greedyChannel = double(greedyChannel);
+        end
     end
 
     methods (Access = private)

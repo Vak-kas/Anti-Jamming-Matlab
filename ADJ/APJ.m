@@ -1,13 +1,15 @@
 classdef APJ < Node
     properties
         TargetUTId
-        ObservedChannel
-        PredictedChannel
-        JammingChannel
+
+        ObservedChannel     % 실제 관측한 현재 UT 채널
+        PredictedChannel    % Shadow DQN이 예측한 다음 채널
+        JammingChannel      % 실제 공격한 채널
 
         Threshold
 
         ObservationManager
+        Agent
     end
 
     methods
@@ -23,6 +25,7 @@ classdef APJ < Node
             obj.Threshold = threshold;
 
             obj.ObservationManager = ObservationManager(obj, numChannels, phi);
+            obj.Agent = APJAgent(obj);
         end
 
 

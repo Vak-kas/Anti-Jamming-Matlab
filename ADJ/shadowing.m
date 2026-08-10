@@ -83,8 +83,13 @@ end
 
 
 %% ==================== Time Slot 마다 수행 ====================
-timeSlot = TimeSlot();
 
+actualChannels = nan(1, numTimeSlots);
+utGreedyChannels = nan(1, numTimeSlots);
+apjPredictedChannels = nan(1, numTimeSlots);
+actualPredictionCorrect = nan(1, numTimeSlots);
+greedyAgreementCorrect = nan(1, numTimeSlots);
+timeSlot = TimeSlot();
 targetACKHistory = zeros(1, numTimeSlots);
 
 TP = 0;
@@ -94,13 +99,7 @@ TN = 0;
 
 for slotIndex = 1:numTimeSlots
 
-    [result, actualTargetACK] = timeSlot.run( ...
-        slotIndex, ...
-        UTs, ...
-        Satellites, ...
-        APJ, ...
-        ServiceChannels, ...
-        ControlChannels);
+    [result, actualTargetACK, shadowResult] = timeSlot.run(slotIndex, UTs, Satellites, APJ, ServiceChannels, ControlChannels);
 
     % APJ HARQ 예측 결과 누적
     switch result
@@ -121,6 +120,22 @@ for slotIndex = 1:numTimeSlots
                 "Main:UnknownResult", ...
                 "알 수 없는 result 값입니다: %d", ...
                 result);
+    end
+
+    % Shadowing 결과 저장
+
+    if ~isempty(shadowResult.ActualChannel)
+
+        actualChannels(slotIndex) = shadowResult.ActualChannel;
+
+        utGreedyChannels(slotIndex) = shadowResult.UTGreedyChannel;
+
+        apjPredictedChannels(slotIndex) = shadowResult.APJPredictedChannel;
+
+        actualPredictionCorrect(slotIndex) = double(shadowResult.ActualPredictionCorrect);
+
+        greedyAgreementCorrect(slotIndex) = double(shadowResult.GreedyAgreementCorrect);
+
     end
 
     % Target UT의 실제 ACK/NACK 결과 저장
@@ -149,32 +164,51 @@ if timeSlot.UseAgent
 end
 
 finalAPJObservation = APJ.ObservationManager.observe(ServiceChannels, UTs);
-APJ.Agent.setCurrentState(finDalAPJObservation);
+APJ.Agent.setCurrentState(finalAPJObservation);
 APJ.Agent.completeTransition();
 
 % 마지막 Transition을 포함하여 한 번 더 학습
 APJ.Agent.train();
 
 
-%% Target UT 성공률 시간 추이
-windowSize = 200;
+%% ==================== APJ Shadowing Analysis ====================
 
-if numTimeSlots < windowSize
-    error( ...
-        "Main:InsufficientTimeSlots", ...
-        "성공률 계산을 위해 numTimeSlots는 최소 %d 이상이어야 합니다.", ...
-        windowSize);
-end
+validSlots = ~isnan(actualPredictionCorrect);
 
-firstACKRate = mean(targetACKHistory(1:windowSize));
-lastACKRate = mean(targetACKHistory(end-windowSize+1:end));
+actualCorrect = actualPredictionCorrect(validSlots);
+
+greedyCorrect = greedyAgreementCorrect(validSlots);
+
+%% 1. Cumulative Accuracy
+
+cumulativeActualAccuracy = cumsum(actualCorrect) ./ (1:numel(actualCorrect));
+
+cumulativeGreedyAccuracy = cumsum(greedyCorrect) ./ (1:numel(greedyCorrect));
+
+%% 2. Moving Accuracy
+
+windowSize = 100;
+
+movingActualAccuracy = movmean(actualCorrect, [windowSize-1 0]);
+
+movingGreedyAccuracy = movmean(greedyCorrect, [windowSize-1 0]);
+
+%% 3. 최종 Accuracy
+
+finalActualAccuracy = mean(actualCorrect);
+
+finalGreedyAccuracy = mean(greedyCorrect);
 
 fprintf("\n");
+
 fprintf("------------------------------------------------------------\n");
-fprintf("Target UT ACK Rate\n");
+
+fprintf("APJ Shadowing Performance\n");
+
 fprintf("------------------------------------------------------------\n");
-fprintf("  First %d slots : %.2f %%\n", ...
-    windowSize, firstACKRate * 100);
-fprintf("  Last  %d slots : %.2f %%\n", ...
-    windowSize, lastACKRate * 100);
+
+fprintf("  Actual Action Prediction Accuracy : %.2f %%\n", finalActualAccuracy * 100);
+
+fprintf("  Greedy Policy Agreement           : %.2f %%\n", finalGreedyAccuracy * 100);
+
 fprintf("------------------------------------------------------------\n");

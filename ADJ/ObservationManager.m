@@ -57,6 +57,13 @@ classdef ObservationManager < handle
                     continue;
                 end
 
+                % Target UT의 송신 신호 제외
+                if obj.Owner.Type == NodeType.APJ && ...
+                   packet.SourceType == NodeType.UT && ...
+                   packet.SourceId == obj.Owner.TargetUTId
+                    continue;
+                end
+
                 sourceNode = UTs(packet.SourceId);
 
                 % 수신 전력 측정

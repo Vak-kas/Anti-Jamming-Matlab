@@ -287,6 +287,12 @@ classdef DebugHelper
                         continue;
                     end
 
+                    if owner.Type == NodeType.APJ && ...
+                       packet.SourceType == NodeType.UT && ...
+                       packet.SourceId == owner.TargetUTId
+                        continue;
+                    end
+
                     sourceNode = UTs(packet.SourceId);
 
                     lambda = 3e8 / channel.CenterFrequency_Hz;
@@ -404,6 +410,74 @@ classdef DebugHelper
             fprintf("  Training Step : %d\n", trainingStep);
             fprintf("  Loss          : %.6f\n", lossValue);
             fprintf("\n");
+        end
+
+
+        % ========== APJ Shadowing 결과 출력 ========== %
+        function printAPJShadowing( ...
+            slotIndex, ...
+            actualChannel, ...
+            utGreedyChannel, ...
+            predictedChannel, ...
+            utQValues, ...
+            apjQValues)
+        
+            % 실제 Action 예측 성공 여부
+            actualPredictionCorrect = ...
+                (predictedChannel == actualChannel);
+        
+            % Greedy Policy 일치 여부
+            greedyAgreement = ...
+                (predictedChannel == utGreedyChannel);
+        
+            fprintf("\n");
+            fprintf("------------------------------------------------------------\n");
+            fprintf("APJ Shadowing | Slot %d\n", slotIndex);
+            fprintf("------------------------------------------------------------\n");
+        
+            fprintf("  Actual UT Channel     : %d\n", actualChannel);
+            fprintf("  UT Greedy Channel     : %d\n", utGreedyChannel);
+            fprintf("  APJ Predicted Channel : %d\n", predictedChannel);
+        
+            fprintf("\n");
+        
+            if actualPredictionCorrect
+                fprintf("  Actual Prediction     : Correct\n");
+            else
+                fprintf("  Actual Prediction     : Wrong\n");
+            end
+        
+            if greedyAgreement
+                fprintf("  Greedy Agreement      : Correct\n");
+            else
+                fprintf("  Greedy Agreement      : Wrong\n");
+            end
+        
+        
+            % UT Q-values
+            fprintf("\n");
+            fprintf("  UT Q-values\n");
+        
+            for channelIndex = 1:numel(utQValues)
+                fprintf( ...
+                    "    Ch %2d : %10.4f\n", ...
+                    channelIndex, ...
+                    utQValues(channelIndex));
+            end
+        
+        
+            % APJ Q-values
+            fprintf("\n");
+            fprintf("  APJ Q-values\n");
+        
+            for channelIndex = 1:numel(apjQValues)
+                fprintf( ...
+                    "    Ch %2d : %10.4f\n", ...
+                    channelIndex, ...
+                    apjQValues(channelIndex));
+            end
+        
+            fprintf("------------------------------------------------------------\n");
         end
 
     end

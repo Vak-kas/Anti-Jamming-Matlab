@@ -1,5 +1,5 @@
 %% ==================== Simulation Parameters ====================
-reconnaissanceDuration = 1;
+reconnaissanceDuration = 10000;
 numTimeSlots = 10000;
 useAgent = true;
 isDebug = true;
@@ -15,7 +15,6 @@ numAPJ = 1;% Number of APJs
 
 
 targetUTId = 1;% Target UT ID
-
 
 %% ==================== Position Parameters ====================
 % ground region size
@@ -85,15 +84,15 @@ apjReplayBufferCapacity = 10000;
 
 % Epsilon-greedy
 apjEpsilon = 1.000;
-apjEpsilonMin = 0.001;
-apjEpsilonDecay = 0.995;
+apjEpsilonMin = 0.05;
+apjEpsilonDecay = 0.997;
 
 apjTargetUpdateFrequency = 100;
 
 
-apjSuccessReward = 1;
+apjSuccessReward = 5;
 apjFailureReward = -1;
-apjRewardFunction = @(targetACK) double(~targetACK) * apjSuccessReward + double(targetACK) * apjFailureReward;
+apjRewardFunction = @(targetACK) double(targetACK) * apjSuccessReward + double(~targetACK) * apjFailureReward;
 
 
 

@@ -14,9 +14,15 @@ classdef TimeSlot
         end
 
         
-        function [result, actualTargetACK] = run(obj, slotIndex, UTs, Satellites, apjNode, ServiceChannels, ControlChannels)
+        function [result, actualTargetACK, shadowResult] = run(obj, slotIndex, UTs, Satellites, APJ, ServiceChannels, ControlChannels)
 
+            shadowResult = struct('ActualChannel', [], 'UTGreedyChannel', [], ...
+                    'APJPredictedChannel', [], ...
+                    'ActualPredictionCorrect', false, ...
+                    'GreedyAgreementCorrect', false);
             DebugHelper.printTimeSlot(slotIndex);
+            
+
 
 
             %% 0. 채널 센싱 및 이전 Transition 완성
@@ -26,10 +32,17 @@ classdef TimeSlot
                 UTs(utIndex).Agent.completeTransition();
             end
 
+            
+            apjObservation = APJ.ObservationManager.observe(ServiceChannels, UTs);
+            APJ.Agent.setCurrentState(apjObservation);
+            APJ.Agent.completeTransition();
+
+
             % DebugHelper.printObservation(UTs(1), ServiceChannels, UTs);
-            % DebugHelper.printObservation(UTs(2), ServiceChannels, UTs);
+            % DebugHelper.printObservation(APJ, ServiceChannels, UTs);
 
             %% 1. DQN 학습
+            % UT
             if obj.UseAgent
                 for utIndex = 1:numel(UTs)
                     lossValue = UTs(utIndex).Agent.train();
@@ -39,6 +52,14 @@ classdef TimeSlot
                         DebugHelper.printTraining(UTs(utIndex).Id, UTs(utIndex).Agent.ReplayBuffer.Count, UTs(utIndex).Agent.TrainingStep, lossValue);
                     end
                 end
+            end
+
+            % APJ
+            if slotIndex <= obj.ReconnaissanceDuration
+                apjLossValue = APJ.Agent.train();
+            end
+            if obj.Debug && ~isempty(apjLossValue)
+                    DebugHelper.printTraining(APJ.Id, APJ.Agent.ReplayBuffer.Count, APJ.Agent.TrainingStep, apjLossValue);
             end
 
 
@@ -81,15 +102,37 @@ classdef TimeSlot
             
             %% 5. APJ 동작
             % Target UT의 사용중인 채널 탐색
-            observedChannel = apjNode.findObservedChannel(ServiceChannels);
+            observedChannel = APJ.findObservedChannel(ServiceChannels);
 
 
             if slotIndex <= obj.ReconnaissanceDuration
-            % 아직 정찰 단계
+                % 아직 정찰 단계
+                % Target UT의 실제 사용 채널을 Shadow DQN 학습 action으로 저장
+                APJ.Agent.setObservedAction(observedChannel);
+
+                % APJ의 현재 예측
+
+                [predictedChannel, apjQValues] = APJ.Agent.predictAction();
+                APJ.PredictedChannel = predictedChannel;
+
+                % Target UT의 Greedy Policy
+                [utGreedyChannel, utQValues] = UTs(APJ.TargetUTId).Agent.getGreedyAction();
+
+                 % ---------- Shadowing 결과 저장 ----------
+
+                shadowResult.ActualChannel = observedChannel;
+                shadowResult.UTGreedyChannel = utGreedyChannel;
+                shadowResult.APJPredictedChannel = predictedChannel;
+                shadowResult.ActualPredictionCorrect =  (predictedChannel == observedChannel);
+                shadowResult.GreedyAgreementCorrect = (predictedChannel == utGreedyChannel);
+
+                if obj.Debug
+                    DebugHelper.printAPJShadowing(slotIndex, observedChannel, utGreedyChannel, predictedChannel, utQValues, apjQValues);
+                end
             
 
             else
-            % 공격 수행 단계
+                % 공격 수행 단계
 
 
             end
@@ -123,7 +166,10 @@ classdef TimeSlot
             end
 
             % APJ가 성공 여부 확인
-            estimatedACK = apjNode.estimateHARQ(ServiceChannels, UTs);
+            estimatedACK = APJ.estimateHARQ(ServiceChannels, UTs);
+            if slotIndex <= obj.ReconnaissanceDuration
+                APJ.Agent.setReward(estimatedACK);
+            end
 
 
             %% 결과 반환
