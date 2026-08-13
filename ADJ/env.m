@@ -1,6 +1,6 @@
 %% ==================== Simulation Parameters ====================
-reconnaissanceDuration = 10000;
-numTimeSlots = 10000;
+reconnaissanceDuration = 1500;
+numTimeSlots = 1500;
 useAgent = true;
 isDebug = true;
 
