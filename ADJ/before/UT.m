@@ -34,21 +34,6 @@ classdef UT < Node
         end
 
 
-        % ========== 규칙 기반 채널 선택 ========== %
-        function selectedChannel = selectRuleBasedChannel(obj)
-            if isempty(obj.ChannelPattern)
-                error("UT:ChannelPatternNotSet", "UT %d의 ChannelPattern이 설정되지 않았습니다.", obj.Id);
-            end
-            selectedChannel = obj.ChannelPattern(obj.PatternIndex);
-        
-            % 다음 위치로 이동
-            obj.PatternIndex = obj.PatternIndex + 1;
-        
-            % 끝까지 갔으면 다시 처음으로
-            if obj.PatternIndex > numel(obj.ChannelPattern)
-                obj.PatternIndex = 1;
-            end
-        
-        end
+
     end
 end

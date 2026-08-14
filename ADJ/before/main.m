@@ -28,18 +28,36 @@ end
 % Satellite 생성
 Satellites = Satellite.empty(0, numSatellites);
 for n = 1:numSatellites
-    pos = UTs(n).getPosition();
 
-    x = pos(1);
-    y = pos(2);
+    utPos = UTs(n).getPosition();
+    utX = utPos(1);
+    utY = utPos(2);
+
+
+    satXMin = utX - satelliteCoverageRadius;
+    satXMax = utX + satelliteCoverageRadius;
+
+    satYMin = utY - satelliteCoverageRadius;
+    satYMax = utY + satelliteCoverageRadius;
+
+    % Generate a valid satellite ground projection
+    while true
+        x = satXMin + (satXMax - satXMin) * rand();
+        y = satYMin + (satYMax - satYMin) * rand();
+        groundDistance = sqrt((x - utX)^2 + (y - utY)^2);
+
+        if groundDistance <= satelliteCoverageRadius
+            break;
+        end
+
+    end
     z = satelliteAltitude;
-
     satellitePosition = [x, y, z];
     associatedUTId = UTs(n).Id;
 
     Satellites(n) = Satellite(n, satellitePosition, satelliteTxPower_dBm, associatedUTId, sinrThreshold_dB, satelliteRxGain_dBi, satelliteGOverT_dB);
 end
-% DebugHelper.printSatelliteInfo(Satellites(1));
+DebugHelper.printSatelliteInfo(Satellites(1));
 
 
 % APJ 생성
@@ -61,7 +79,7 @@ FigureHelper.plotAPJ(ax, APJ);
 
 
 
-% DebugHelper.printAssociationDistances(UTs, Satellites);
+DebugHelper.printAssociationDistances(UTs, Satellites);
 
 
 
@@ -149,7 +167,7 @@ if timeSlot.UseAgent
 end
 
 finalAPJObservation = APJ.ObservationManager.observe(ServiceChannels, UTs);
-APJ.Agent.setCurrentState(finDalAPJObservation);
+APJ.Agent.setCurrentState(finalAPJObservation);
 APJ.Agent.completeTransition();
 
 % 마지막 Transition을 포함하여 한 번 더 학습

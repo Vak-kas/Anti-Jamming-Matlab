@@ -1,6 +1,6 @@
 %% ==================== Simulation Parameters ====================
-reconnaissanceDuration = 1500;
-numTimeSlots = 1500;
+reconnaissanceDuration = 1000;
+numTimeSlots =  1000;
 useAgent = true;
 isDebug = true;
 
@@ -10,19 +10,23 @@ serviceBandEnd_Hz = 2010e6;
 
 numSatellites = 10; % Number of satellites
 numUTs = numSatellites; % Number of UTs
-K = 10; % Number of service channels
+numChannels = 10; % Number of service channels
 numAPJ = 1;% Number of APJs
 
 
 targetUTId = 1;% Target UT ID
 
 %% ==================== Position Parameters ====================
-% ground region size
+% beam ground region size
 groundWidth = 50e3; %50km
 groundHeight = 50e3; %50km
 
-% Satellite Altitude
-satelliteAltitude = 600e3; %600km
+
+
+% Earth / Satellite
+earthRadius = 6378e3;
+satelliteAltitude = 600e3; % 위성 고도 600km
+minSatelliteElevation_deg = 10; %각도 (10도)
 
 
 %Target UT - APJ Distance
@@ -103,6 +107,14 @@ apjTxPower_W = 10^((apjTxPower_dBm - 30) / 10); % Convert APJ transmit power fro
 
 
 totalBandwidth_Hz = serviceBandEnd_Hz - serviceBandStart_Hz;
-NumServiceChannels = K;
+NumServiceChannels = numChannels;
 channelSpacing_Hz = totalBandwidth_Hz / NumServiceChannels;
 channelBandwidth_Hz = 360e3;
+
+% ===== Satellite coverage geometry =====
+
+minSatelliteElevation_rad = deg2rad(minSatelliteElevation_deg); % Minimum elevation angle [rad]
+
+maxGroundCentralAngle_rad = acos(earthRadius / (earthRadius + satelliteAltitude) * cos(minSatelliteElevation_rad)) - minSatelliteElevation_rad;
+satelliteCoverageRadius = earthRadius * maxGroundCentralAngle_rad; % 약 1760 km
+
