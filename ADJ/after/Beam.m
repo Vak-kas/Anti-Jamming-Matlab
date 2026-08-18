@@ -53,5 +53,64 @@ classdef Beam < handle
             position = position(:);
             distance = norm(beamCenter(1:2) - position(1:2));
         end
+
+        % ========== 특정 위치에 대한 Beam Tx Gain 계산 ==========
+        function gain_dBi = calculateTxGain(obj, Satellite, targetPosition, centerFrequency_Hz)
+        
+            % 위치 벡터
+            satellitePosition = Satellite.Position(:);
+            beamCenterPosition = obj.CenterPosition(:);
+            targetPosition = targetPosition(:);
+        
+            % Satellite -> Beam Center 방향
+            beamDirection = beamCenterPosition - satellitePosition;
+        
+            % Satellite -> Target 방향
+            targetDirection = targetPosition - satellitePosition;
+        
+        
+            % Off-axis Angle 계산
+            cosTheta = dot(beamDirection, targetDirection) / (norm(beamDirection) * norm(targetDirection));
+        
+            % Numerical error 방지
+            cosTheta = max(-1, min(1, cosTheta));
+            theta_rad = acos(cosTheta);
+        
+        
+            % 3GPP TR 38.811 Section 6.4.1
+            % Circular aperture antenna pattern
+        
+            c = 3e8;
+        
+            % Set-1 LEO-600 S-band:
+            % Equivalent satellite antenna aperture = 2 m (diameter)
+            apertureDiameter_m = 2.0;
+            apertureRadius_m = apertureDiameter_m / 2;
+        
+            % Wave number
+            k = 2 * pi * centerFrequency_Hz / c;
+        
+            % Bessel argument
+            x = k * apertureRadius_m * sin(theta_rad);
+        
+        
+            % Normalized antenna gain
+            if abs(x) < 1e-8
+                normalizedGain = 1;
+            else
+                normalizedGain = (2 * besselj(1, x) / x)^2;
+            end
+        
+        
+            % Maximum gain 적용
+            maxGain_linear = 10^(obj.MaxTxGain_dBi / 10);
+            gain_linear = maxGain_linear * normalizedGain;
+            
+            % Linear -> dBi
+            gain_dBi = 10 * log10(max(gain_linear, realmin));
+        
+        end
+
+
     end
 end

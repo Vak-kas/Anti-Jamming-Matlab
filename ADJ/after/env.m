@@ -1,15 +1,16 @@
 %% ==================== Simulation Parameters ====================
 simulationSeed = 1;
-reconnaissanceDuration = 1000;
-numTimeSlots =  1000;
+reconnaissanceDuration = 1;
+numTimeSlots =  1;
 useAgent = true;
-isDebug = true;
-
+observationMode = "O";
 %% ==================== Channel Parameters ====================
 numChannels = 10; % Number of service channels
 
-serviceBandStart_Hz = 1980e6;
-serviceBandEnd_Hz = 2010e6;
+% serviceBandStart_Hz = 1980e6;
+% serviceBandEnd_Hz = 2010e6;
+serviceBandStart_Hz = 2170e6;
+serviceBandEnd_Hz   = 2200e6;
 
 totalBandwidth_Hz = serviceBandEnd_Hz - serviceBandStart_Hz;
 NumServiceChannels = numChannels;
@@ -19,7 +20,7 @@ channelBandwidth_Hz = 360e3;
 
 %% ==================== System Parameters ====================
 numSatellites = 1; % Number of satellites
-numUTs = 10; % Number of UTs
+numUTs = 19; % Number of UTs
 numAPJ = 1;% Number of APJs
 targetUTId = 1;% Target UT ID
 
@@ -37,10 +38,11 @@ maxGroundCentralAngle_rad = acos(earthRadius / (earthRadius + satelliteAltitude)
 satelliteCoverageRadius = earthRadius * maxGroundCentralAngle_rad; % 약 1760 km
 
 %% ==================== Beam Parameters ====================
-numBeams = 10;
+numBeams = numUTs;
 
 beamDiameter = 50e3;
 beamRadius = beamDiameter / 2;
+beamSpacing = 40e3;
 
 
 maxBeamFootprintDiameter = 1000e3;  % 3GPP TR 38.821 Table 4.2-2
@@ -62,7 +64,7 @@ noiseTemperature = 290;
 noiseFigure_dB = 7;
 utRxGain_dBi = 0;
 
-sinrThreshold_dB = 3; % SINR Threshold
+sinrThreshold_dB = 13.5; % SINR Threshold
 
 
 

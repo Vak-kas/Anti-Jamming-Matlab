@@ -30,7 +30,7 @@ SatelliteNode = Satellite(9999, satellitePosition, numBeams);
 
 
 %%  ==================== Beam 생성 ====================
-Beams = BeamFactory.createBeams(numBeams, maxBeamFootprintDiameter, beamRadius, beamMaxGain_dBi, beam3dBWidth_deg, beamEIRPDensity_dBW_per_MHz, channelBandwidth_Hz);
+Beams = BeamFactory.createBeams(numBeams, maxBeamFootprintDiameter, beamRadius, beamSpacing, beamMaxGain_dBi, beam3dBWidth_deg, beamEIRPDensity_dBW_per_MHz, channelBandwidth_Hz);
 
 for beamIndex = 1:numBeams
     SatelliteNode.addBeam(Beams(beamIndex));
@@ -45,11 +45,42 @@ UTs = UTFactory.createUTs(Beams, numUTs);
 APJNode = APJFactory.createAPJ(UTs, Beams, targetUTId, targetJammerDistance);
 
 
+%% ==================== Time Slot 마다 수행 ====================
+slotSuccessRatios = zeros(1, numTimeSlots);
+targetACKResults = zeros(1, numTimeSlots);
+targetSINRResults_dB = zeros(1, numTimeSlots);
+totalACKCount = 0;
+totalTransmissionCount = 0;
+
+
+timeSlot = TimeSlot();
+for slotIndex = 1:numTimeSlots
+    [harqResults, sinrResults_dB, actualTargetACK, successRatio] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
+
+    % 현재 Slot 결과 저장
+    slotSuccessRatios(slotIndex) = successRatio;
+    targetACKResults(slotIndex) = actualTargetACK;
+    targetSINRResults_dB(slotIndex) = sinrResults_dB(targetUTId);
+
+    % 전체 ACK 통계 누적
+    for utIndex = 1:numel(UTs)
+        if harqResults{utIndex} == PacketType.ACK
+            totalACKCount = totalACKCount + 1;
+        end
+    end
+
+    totalTransmissionCount = totalTransmissionCount + numel(UTs);
+end
+
+
 %% ==================== Debug ====================
 % DebugHelper.printSatelliteInfo(SatelliteNode);
 % DebugHelper.printUTInfo(UTs, Beams, SatelliteNode);
-DebugHelper.printAPJInfo(APJNode, UTs, SatelliteNode);
+% DebugHelper.printAPJInfo(APJNode, UTs, SatelliteNode);
 % DebugHelper.printBeamUTAssociation(Beams, UTs);
 
+DebugHelper.printSimulationSummary(numTimeSlots, numel(UTs), totalACKCount, totalTransmissionCount, ...
+    slotSuccessRatios, targetACKResults, targetSINRResults_dB);
+
 %% ==================== Figure ====================
-FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
+% FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
