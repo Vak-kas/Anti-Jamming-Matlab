@@ -12,6 +12,8 @@ classdef Packet
 
         ChannelType %ChannelType
         ChannelId
+
+        Payload
     end
 
     methods
@@ -28,7 +30,16 @@ classdef Packet
 
             obj.ChannelType = channelType;
             obj.ChannelId = channelId;
+
+            obj.Payload = [];
         end
+
+
+        % ========== Payload 설정 ==========
+        function obj = setPayload(obj, payload)
+            obj.Payload = payload;
+        end
+
 
     end
 

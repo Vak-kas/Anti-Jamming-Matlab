@@ -662,5 +662,435 @@ classdef DebugHelper
         
         end
 
+        %% ========== Observation Sensing 결과 출력 ==========
+        function printObservationSensing(owner, observationManager, ServiceChannels, Satellite)
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('RF Sensing - %s %d\n', char(string(owner.Type)), owner.Id);
+            fprintf('============================================================\n');
+        
+            fprintf('  Number of Channels       : %d\n', observationManager.NumChannels);
+        
+            if owner.Type == NodeType.UT
+                fprintf('  Associated Beam          : %d\n', owner.AssociatedBeamId);
+            end
+        
+            fprintf('\n');
+            fprintf('  [Per-Channel Sensing]\n');
+        
+        
+            %% 채널별 상세 sensing 정보
+            for channelIndex = 1:observationManager.NumChannels
+        
+                channel = ServiceChannels(channelIndex);
+                packets = channel.getPackets();
+        
+                centerFrequency_Hz = channel.CenterFrequency_Hz;
+        
+                fprintf('\n');
+                fprintf('    Channel %2d | %.3f MHz\n', ...
+                    channelIndex, ...
+                    centerFrequency_Hz / 1e6);
+        
+        
+                numDataPackets = 0;
+                numInterferingBeams = 0;
+        
+        
+                %% 해당 채널의 DATA Beam 확인
+                for packetIndex = 1:numel(packets)
+        
+                    packet = packets(packetIndex);
+        
+                    if packet.Type ~= PacketType.DATA
+                        continue;
+                    end
+        
+                    numDataPackets = numDataPackets + 1;
+        
+                    beam = Satellite.Beams(packet.BeamId);
+        
+        
+                    %% Serving Beam 여부
+                    isServingBeam = false;
+        
+                    if owner.Type == NodeType.UT
+                        isServingBeam = ...
+                            (beam.Id == owner.AssociatedBeamId);
+                    end
+        
+        
+                    %% Serving Beam이면 sensing에서 제외
+                    if isServingBeam
+        
+                        fprintf( ...
+                            '      Beam %2d -> UT %2d | Serving Beam | Excluded\n', ...
+                            beam.Id, ...
+                            packet.DestinationId ...
+                        );
+        
+                        continue;
+                    end
+        
+        
+                    %% 실제 수신 전력 계산
+                    receivedPower_W = ...
+                        observationManager.calculateReceivedPower_W( ...
+                            beam, ...
+                            Satellite, ...
+                            centerFrequency_Hz ...
+                        );
+        
+                    receivedPower_dBm = ...
+                        10 * log10(receivedPower_W) + 30;
+        
+                    numInterferingBeams = ...
+                        numInterferingBeams + 1;
+        
+        
+                    fprintf( ...
+                        '      Beam %2d -> UT %2d | Rx Power: %8.2f dBm\n', ...
+                        beam.Id, ...
+                        packet.DestinationId, ...
+                        receivedPower_dBm ...
+                    );
+        
+                end
+        
+        
+                %% Noise
+                noisePower_W = ...
+                    observationManager.calculateNoisePower_W( ...
+                        channel.Bandwidth_Hz ...
+                    );
+        
+                noisePower_dBm = ...
+                    10 * log10(noisePower_W) + 30;
+        
+        
+                %% Observation
+                sensedPower_dBm = ...
+                    observationManager.CurrentObservation(channelIndex);
+        
+        
+                if numDataPackets == 0
+        
+                    fprintf('      DATA Beams           : None\n');
+        
+                elseif numInterferingBeams == 0
+        
+                    fprintf('      Interfering Beams    : None\n');
+        
+                end
+        
+        
+                fprintf('      Noise Power          : %8.2f dBm\n', ...
+                    noisePower_dBm);
+        
+                fprintf('      Sensed Power         : %8.2f dBm\n', ...
+                    sensedPower_dBm);
+        
+            end
+        
+        
+            %% Current Observation
+            fprintf('\n');
+            fprintf('  [Current Observation]\n');
+        
+            fprintf('    Channel :');
+        
+            for channelIndex = 1:observationManager.NumChannels
+                fprintf(' %8d', channelIndex);
+            end
+        
+            fprintf('\n');
+        
+            fprintf('    Power   :');
+        
+            for channelIndex = 1:observationManager.NumChannels
+                fprintf(' %8.2f', ...
+                    observationManager.CurrentObservation(channelIndex));
+            end
+        
+            fprintf(' dBm\n');
+        
+            fprintf('============================================================\n');
+        
+        end
+       
+
+        %% ========== Control Channel 상세 출력 ==========
+        function printChannelDetail(ControlChannels)
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Control Channel Detail\n');
+            fprintf('============================================================\n');
+        
+            for channelIndex = 1:numel(ControlChannels)
+        
+                packets = ControlChannels(channelIndex).getPackets();
+        
+                fprintf('\n');
+                fprintf('  Channel %2d\n', channelIndex);
+        
+                if isempty(packets)
+                    fprintf('    Empty\n');
+                    continue;
+                end
+        
+                for packetIndex = 1:numel(packets)
+        
+                    packet = packets(packetIndex);
+        
+                    % ACK / NACK 문자열
+                    if packet.Type == PacketType.ACK
+                        packetTypeStr = 'ACK';
+                    elseif packet.Type == PacketType.NACK
+                        packetTypeStr = 'NACK';
+                    else
+                        packetTypeStr = char(string(packet.Type));
+                    end
+        
+                    % 기본 정보
+                    fprintf('    %-4s | UT %2d -> Beam %2d\n', ...
+                        packetTypeStr, ...
+                        packet.SourceId, ...
+                        packet.BeamId);
+        
+                    % Payload
+                    if isempty(packet.Payload)
+        
+                        fprintf('           Payload : Empty\n');
+        
+                    else
+        
+                        fprintf('           Payload :');
+        
+                        for channelIndexPayload = 1:numel(packet.Payload)
+                            fprintf(' %8.2f', packet.Payload(channelIndexPayload));
+                        end
+        
+                        fprintf(' dBm\n');
+        
+                    end
+        
+                end
+        
+            end
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+        
+        end
+
+
+        %% ========== Beam StateManager 상태 출력 ==========
+        function printBeamState(beam)
+        
+            stateManager = beam.StateManager;
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Beam State - Beam %d\n', beam.Id);
+            fprintf('============================================================\n');
+        
+            fprintf('  Associated UT            : %d\n', beam.AssociatedUTId);
+            fprintf('  Selected Channel         : %d\n', beam.SelectedChannel);
+            fprintf('  Number of Channels       : %d\n', stateManager.NumChannels);
+            fprintf('  History Length           : %d\n', stateManager.HistoryLength);
+            fprintf('  Number of Updates        : %d\n', stateManager.NumUpdates);
+            fprintf('  Mode                     : %s\n', char(string(stateManager.Mode)));
+        
+            if stateManager.isReady()
+                fprintf('  State Status             : READY\n');
+            else
+                fprintf('  State Status             : NOT READY (%d / %d)\n', ...
+                    stateManager.NumUpdates, ...
+                    stateManager.HistoryLength);
+            end
+        
+        
+            %% ============================================================
+            %  Latest O / A / H
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Latest O / A / H]\n');
+        
+            % Header
+            fprintf('              ');
+            for channelIndex = 1:stateManager.NumChannels
+                fprintf(' %8s', sprintf('CH%d', channelIndex));
+            end
+            fprintf('\n');
+        
+        
+            % Observation
+            fprintf('    O       :');
+            for channelIndex = 1:stateManager.NumChannels
+                fprintf(' %8.2f', ...
+                    stateManager.ObservationHistory(1, channelIndex));
+            end
+            fprintf('\n');
+        
+        
+            % Action
+            fprintf('    A       :');
+            for channelIndex = 1:stateManager.NumChannels
+                fprintf(' %8.0f', ...
+                    stateManager.ActionHistory(1, channelIndex));
+            end
+            fprintf('\n');
+        
+        
+            % HARQ
+            fprintf('    H       :');
+            for channelIndex = 1:stateManager.NumChannels
+                fprintf(' %8.0f', ...
+                    stateManager.HarqHistory(1, channelIndex));
+            end
+            fprintf('\n');
+        
+        
+            %% ============================================================
+            %  Observation History
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Observation History]\n');
+        
+            DebugHelper.printStateHistoryMatrix( ...
+                stateManager.ObservationHistory, ...
+                stateManager.NumUpdates, ...
+                stateManager.HistoryLength, ...
+                stateManager.NumChannels, ...
+                '%.2f' ...
+            );
+        
+        
+            %% ============================================================
+            %  Action History
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Action History]\n');
+        
+            DebugHelper.printStateHistoryMatrix( ...
+                stateManager.ActionHistory, ...
+                stateManager.NumUpdates, ...
+                stateManager.HistoryLength, ...
+                stateManager.NumChannels, ...
+                '%.0f' ...
+            );
+        
+        
+            %% ============================================================
+            %  HARQ History
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [HARQ History]\n');
+        
+            DebugHelper.printStateHistoryMatrix( ...
+                stateManager.HarqHistory, ...
+                stateManager.NumUpdates, ...
+                stateManager.HistoryLength, ...
+                stateManager.NumChannels, ...
+                '%.0f' ...
+            );
+        
+        
+            %% ============================================================
+            %  DQN State
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [DQN State]\n');
+        
+            state = stateManager.getState();
+            stateSize = size(state);
+        
+            if numel(stateSize) == 2
+                fprintf('    State Size             : %d x %d\n', ...
+                    stateSize(1), ...
+                    stateSize(2));
+            else
+                fprintf('    State Size             : %d x %d x %d\n', ...
+                    stateSize(1), ...
+                    stateSize(2), ...
+                    stateSize(3));
+            end
+        
+            fprintf('============================================================\n');
+        
+        end
+        
+        
+        %% ========== State History Matrix 출력 ==========
+        function printStateHistoryMatrix( ...
+                history, ...
+                numUpdates, ...
+                historyLength, ...
+                numChannels, ...
+                numberFormat)
+        
+            % 왼쪽 시간축 폭
+            timeWidth = 8;
+        
+            % 각 Channel 열 폭
+            columnWidth = 10;
+        
+        
+            %% Header
+            fprintf('%*s', timeWidth, '');
+        
+            for channelIndex = 1:numChannels
+                fprintf('%*s', ...
+                    columnWidth, ...
+                    sprintf('CH%d', channelIndex));
+            end
+        
+            fprintf('\n');
+        
+        
+            %% 실제 채워진 Row 수
+            numFilledRows = min(numUpdates, historyLength);
+        
+        
+            %% History 출력
+            for historyIndex = 1:historyLength
+        
+                if historyIndex == 1
+                    timeLabel = 't';
+                else
+                    timeLabel = sprintf('t-%d', historyIndex - 1);
+                end
+        
+                fprintf('%*s', timeWidth, timeLabel);
+        
+        
+                for channelIndex = 1:numChannels
+        
+                    value = history(historyIndex, channelIndex);
+        
+                    valueString = sprintf(numberFormat, value);
+        
+                    fprintf('%*s', ...
+                        columnWidth, ...
+                        valueString);
+        
+                end
+        
+                % 아직 데이터가 없는 Row 표시
+                if historyIndex > numFilledRows
+                    fprintf('   <- Empty');
+                end
+        
+                fprintf('\n');
+        
+            end
+        
+        end
+
+
+        
+
     end
 end

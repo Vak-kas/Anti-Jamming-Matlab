@@ -15,16 +15,11 @@ classdef TimeSlot
 
             DebugHelper.printTimeSlot(slotIndex);
             
-
-            %% 0. 채널 센싱 및 이전 Transition 완성
-            
-            %% 1. DQN 학습
-          
-            %% 2. 채널 초기화
+            %% 1. 채널 초기화
             obj.clearChannels(ServiceChannels, ControlChannels);
 
 
-            %% 3. Satellite beam의 채널 선택
+            %% 2. Satellite beam의 채널 선택 (Action a_t 선택)
             for beamIndex = 1:numel(Satellite.Beams)
                 beam = Satellite.Beams(beamIndex);
                 selectedChannel = randi(numel(ServiceChannels));
@@ -32,7 +27,7 @@ classdef TimeSlot
             end
             
 
-            %% 4. Satellite가 Data를 Service 채널에 Beam을 통해 전송
+            %% 3. Satellite가 해당 채널로 DL 전송
             dataPackets = cell(1, numel(Satellite.Beams));
 
             % 패킷 생성
@@ -52,13 +47,19 @@ classdef TimeSlot
             
             
 
-            
-            %% 5. APJ 동작
-            
-            
-            
+            %% 4. UT와 APJ의 현재 RF 환경 sensing
+            % - UT : o_{t+1}에 해당하는 새 observation 생성 / APJ : 자기 위치에서 별도 observation 생성
+            for utIndex = 1:numel(UTs)
+                UTs(utIndex).ObservationManager.observe(ServiceChannels, Satellite);
+            end
 
-            %% 6. UT의 HARQ 수행
+            APJ.ObservationManager.observe(ServiceChannels, Satellite);
+
+            % DebugHelper.printObservationSensing(UTs(1), UTs(1).ObservationManager, ServiceChannels, Satellite);
+            % DebugHelper.printObservationSensing(APJ, APJ.ObservationManager, ServiceChannels, Satellite);
+
+
+            %% 5. UT의 HARQ 수행
             harqResults = cell(1, numel(UTs));
             sinrResults_dB = zeros(1, numel(UTs));
             for utIndex = 1:numel(UTs)
@@ -68,10 +69,21 @@ classdef TimeSlot
                 sinrResults_dB(utIndex) = SINR_dB;
             end
 
-            DebugHelper.printChannels(ServiceChannels, ControlChannels);
-            
+            % DebugHelper.printChannels(ServiceChannels, ControlChannels);
+            % DebugHelper.printChannelDetail(ControlChannels);
 
-            %% 7. UT & APJ의 결과 확인 및 reward 저장
+            %% 6. Beam이 UT feedback 수신 및 State Update
+            for beamIndex = 1:numel(Satellite.Beams)
+                Satellite.Beams(beamIndex).receiveFeedback(ControlChannels, Satellite);
+            end
+            
+            DebugHelper.printBeamState(Satellite.Beams(1));
+
+
+            %% 7. Transition 완성 + Replay Buffer + DQN 학습(S_t, a_t, r_t, S_{t+1})
+
+            %% 8. APJ 동작
+            
           
 
 

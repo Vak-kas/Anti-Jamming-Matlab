@@ -11,6 +11,11 @@ classdef APJ < Node
         JammingChannel
 
         SINRThreshold_dB
+
+
+        ObservationManager
+        StateManager
+        Agent
     end
 
     methods
@@ -33,6 +38,10 @@ classdef APJ < Node
             obj.ObservedChannel = [];
             obj.PredictedChannel = [];
             obj.JammingChannel = [];
+
+            obj.ObservationManager = ObservationManager(obj, numChannels);
+
+
         end
     end
 end

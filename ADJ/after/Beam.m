@@ -18,13 +18,14 @@ classdef Beam < handle
         AssociatedUTId
 
         % ========== DRL ==========
+        StateManager
         Agent
-        ObservationManager
     end
 
     methods
         % ========== 생성자 ==========
         function obj = Beam(id, centerPosition, radius, txPower_dBm, maxTxGain_dBi, beamwidth3dB_deg, associatedUTId)
+            env;
             obj.Id = id;
 
             obj.CenterPosition = centerPosition;
@@ -38,8 +39,8 @@ classdef Beam < handle
 
             obj.AssociatedUTId = associatedUTId;
 
+            obj.StateManager = StateManager(numChannels, phi, observationMode);
             obj.Agent = [];
-            obj.ObservationManager = [];
         end
 
         % ========== 빔 중심 주파수 가져오기 ==========
@@ -108,6 +109,45 @@ classdef Beam < handle
             
             % Linear -> dBi
             gain_dBi = 10 * log10(max(gain_linear, realmin));
+        
+        end
+
+
+        %% ========== UT Feedback 수신 및 State 업데이트 ==========
+        function receiveFeedback(obj, ControlChannels, Satellite)
+            selectedChannel = obj.SelectedChannel; % 이번 Slot에서 Beam이 사용한 채널
+            packets = ControlChannels(selectedChannel).getPackets(); % 동일한 Control Channel 확인
+        
+            feedbackPacket = Packet.empty;
+        
+        
+            % 자기 Beam의 Feedback 탐색
+            for packetIndex = 1:numel(packets)
+                packet = packets(packetIndex);
+
+                if packet.SourceType == NodeType.UT && packet.DestinationType == NodeType.Satellite && packet.DestinationId == Satellite.Id && packet.BeamId == obj.Id
+                   feedbackPacket = packet;
+                    break;
+                end
+            end
+        
+            if isempty(feedbackPacket)
+                warning("Beam:FeedbackNotFound", "Beam %d의 feedback packet을 찾지 못했습니다.", obj.Id);
+                return;
+            end
+        
+            if feedbackPacket.ChannelId ~= selectedChannel
+                error("Beam:ChannelMismatch", "Beam %d: SelectedChannel=%d, FeedbackChannel=%d", obj.Id, selectedChannel, feedbackPacket.ChannelId);
+            end
+        
+        
+            % O / A / H 추출
+            observation = feedbackPacket.Payload;
+            action = feedbackPacket.ChannelId;
+            harq = feedbackPacket.Type;
+        
+            % State 업데이트
+            obj.StateManager.update(observation, action, harq);
         
         end
 

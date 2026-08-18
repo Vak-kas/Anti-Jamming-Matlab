@@ -1,9 +1,8 @@
 %% ==================== Simulation Parameters ====================
 simulationSeed = 1;
 reconnaissanceDuration = 1;
-numTimeSlots =  1;
+numTimeSlots =  10;
 useAgent = true;
-observationMode = "O";
 %% ==================== Channel Parameters ====================
 numChannels = 10; % Number of service channels
 
@@ -78,8 +77,7 @@ apjSINRThreshold_dB = 14;
 
 %% ==================== COMMON DRL Parameters ====================
 phi = 10;
-
-
+observationMode = ObservationMode.O;
 %% ==================== UT DRL Parameters ====================
 utBatchSize = 32;
 

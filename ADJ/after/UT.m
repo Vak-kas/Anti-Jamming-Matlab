@@ -9,6 +9,8 @@ classdef UT < Node
         AssociatedBeamId
         SINRThreshold_dB
 
+        ObservationManager
+
     end
 
     methods
@@ -27,9 +29,10 @@ classdef UT < Node
             obj.NoiseFigure_dB = noiseFigure_dB;
 
             
-
             obj.AssociatedBeamId = id;
             obj.SINRThreshold_dB = sinrThreshold_dB;
+
+            obj.ObservationManager = ObservationManager(obj, numChannels);
             
 
         end
@@ -78,6 +81,7 @@ classdef UT < Node
 
             packetType = obj.generateHARQFeedback(SINR_dB);
             harqPacket = Packet(packetType, NodeType.UT, obj.Id, NodeType.Satellite, Satellite.Id, obj.AssociatedBeamId, ChannelType.Control, selectedChannel);
+            harqPacket = harqPacket.setPayload(obj.ObservationManager.CurrentObservation);
 
             ControlChannels(selectedChannel).addPacket(harqPacket);
         end

@@ -9,7 +9,6 @@ classdef (Abstract) Node < handle
         RxGain_dBi
 
         k = 1.380649e-23;
-
     end
 
     methods
