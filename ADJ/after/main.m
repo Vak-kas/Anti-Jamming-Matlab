@@ -1,6 +1,7 @@
 clc;
 clear;
 clear variables;
+clear DebugHelper;
 close all;
 
 
@@ -52,6 +53,9 @@ targetSINRResults_dB = zeros(1, numTimeSlots);
 totalACKCount = 0;
 totalTransmissionCount = 0;
 
+beamACKCount = zeros(1, numBeams);
+beamNACKCount = zeros(1, numBeams);
+
 
 timeSlot = TimeSlot();
 for slotIndex = 1:numTimeSlots
@@ -66,7 +70,15 @@ for slotIndex = 1:numTimeSlots
     for utIndex = 1:numel(UTs)
         if harqResults{utIndex} == PacketType.ACK
             totalACKCount = totalACKCount + 1;
+
+            % Beam별 ACK
+            beamACKCount(utIndex) = beamACKCount(utIndex) + 1;
+
+        elseif harqResults{utIndex} == PacketType.NACK
+            beamNACKCount(utIndex) = beamNACKCount(utIndex) +1;
         end
+
+       
     end
 
     totalTransmissionCount = totalTransmissionCount + numel(UTs);
@@ -81,6 +93,10 @@ end
 
 DebugHelper.printSimulationSummary(numTimeSlots, numel(UTs), totalACKCount, totalTransmissionCount, ...
     slotSuccessRatios, targetACKResults, targetSINRResults_dB);
+DebugHelper.printPerBeamHARQSummary(beamACKCount, beamNACKCount);
+% DebugHelper.printQValues(SatelliteNode.Beams(1).Agent, 1);
+% DebugHelper.printBeamPolicySummary();
+% DebugHelper.printCollisionSummary(numChannels);
 
 %% ==================== Figure ====================
-% FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
+FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);

@@ -21,10 +21,10 @@ classdef UTFactory
             randomRadius = sqrt(rand()) * beam.Radius;
             randomAngle = 2 * pi * rand();
 
-            % x = beam.CenterPosition(1) + randomRadius * cos(randomAngle);
-            % y = beam.CenterPosition(2) + randomRadius * sin(randomAngle);
-            x = beam.CenterPosition(1);
-            y = beam.CenterPosition(2);
+            x = beam.CenterPosition(1) + randomRadius * cos(randomAngle);
+            y = beam.CenterPosition(2) + randomRadius * sin(randomAngle);
+            % x = beam.CenterPosition(1);
+            % y = beam.CenterPosition(2);
             z = 0;
             position = [x y z];
 

@@ -1,8 +1,9 @@
 %% ==================== Simulation Parameters ====================
 simulationSeed = 1;
-reconnaissanceDuration = 1;
-numTimeSlots =  10;
-useAgent = true;
+reconnaissanceDuration = 1000;
+numTimeSlots =  1000;
+observationMode = ObservationMode.O;
+
 %% ==================== Channel Parameters ====================
 numChannels = 10; % Number of service channels
 
@@ -63,7 +64,7 @@ noiseTemperature = 290;
 noiseFigure_dB = 7;
 utRxGain_dBi = 0;
 
-sinrThreshold_dB = 13.5; % SINR Threshold
+sinrThreshold_dB = 12.5; % SINR Threshold
 
 
 
@@ -77,27 +78,27 @@ apjSINRThreshold_dB = 14;
 
 %% ==================== COMMON DRL Parameters ====================
 phi = 10;
-observationMode = ObservationMode.O;
-%% ==================== UT DRL Parameters ====================
-utBatchSize = 32;
 
-utLearnRate = 0.001;
-utDiscountFactor = 0.8;
+%% ==================== Beam DRL Parameters ====================
+beamBatchSize = 128;
 
-utReplayBufferCapacity = 10000;
+beamLearnRate = 0.005;
+beamDiscountFactor = 0.8;
+
+beamReplayBufferCapacity = 5000;
 
 
 % Epsilon-greedy
-utEpsilon = 1.000;
-utEpsilonMin = 0.05;
-utEpsilonDecay = 0.997;
+beamEpsilon = 1.000;
+beamEpsilonMin = 0.05;
+beamEpsilonDecay = 0.997;
 
-utTargetUpdateFrequency = 100;
+beamTargetUpdateFrequency = 100;
 
 
-utSuccessReward = 5;
-utFailureReward = -1;
-utRewardFunction = @(isACK) double(isACK) * utSuccessReward + double(~isACK) * utFailureReward;
+beamSuccessReward = 5;
+beamFailureReward = -1;
+beamRewardFunction = @(isACK) double(isACK) * beamSuccessReward + double(~isACK) * beamFailureReward;
 
 
 

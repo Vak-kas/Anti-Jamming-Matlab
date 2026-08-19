@@ -1090,6 +1090,706 @@ classdef DebugHelper
         end
 
 
+        %% ========== Beam Action Selection 출력 ==========
+        function printBeamActionSelection(beam, selectionMethod, randomValue, qValues)
+        
+            agent = beam.Agent;
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Beam Action Selection - Beam %d\n', beam.Id);
+            fprintf('============================================================\n');
+        
+            fprintf('  Associated UT            : %d\n', beam.AssociatedUTId);
+            fprintf('  Selection Method         : %s\n', selectionMethod);
+            fprintf('  Random Value             : %.4f\n', randomValue);
+            fprintf('  Epsilon                  : %.4f\n', agent.Epsilon);
+            fprintf('  Selected Channel         : %d\n', beam.SelectedChannel);
+        
+        
+            % ============================================================
+            % Q-Values
+            % ============================================================
+            fprintf('\n');
+            fprintf('  [Q-Values]\n');
+        
+            if isempty(qValues)
+        
+                fprintf('    Not Used (Random Action)\n');
+        
+            else
+        
+                qValues = qValues(:)';
+        
+                fprintf('    Channel :');
+        
+                for actionIndex = 1:agent.NumActions
+                    fprintf(' %9d', actionIndex);
+                end
+        
+                fprintf('\n');
+        
+        
+                fprintf('    Q-Value :');
+        
+                for actionIndex = 1:agent.NumActions
+                    fprintf(' %9.4f', qValues(actionIndex));
+                end
+        
+                fprintf('\n');
+        
+            end
+        
+        
+            % ============================================================
+            % Pending Transition
+            % ============================================================
+            fprintf('\n');
+            fprintf('  [Pending Transition]\n');
+        
+            if isempty(agent.PendingState)
+                fprintf('    State S_t              : Empty\n');
+            else
+                stateSize = size(agent.PendingState);
+        
+                fprintf('    State S_t Size         : ');
+        
+                for dimensionIndex = 1:numel(stateSize)
+        
+                    if dimensionIndex > 1
+                        fprintf(' x ');
+                    end
+        
+                    fprintf('%d', stateSize(dimensionIndex));
+        
+                end
+        
+                fprintf('\n');
+            end
+        
+            if isempty(agent.PendingAction)
+                fprintf('    Action a_t             : Empty\n');
+            else
+                fprintf('    Action a_t             : %d\n', ...
+                    agent.PendingAction);
+            end
+        
+            if isempty(agent.PendingReward)
+                fprintf('    Reward r_t             : Pending\n');
+            else
+                fprintf('    Reward r_t             : %.4f\n', ...
+                    agent.PendingReward);
+            end
+        
+        
+            fprintf('============================================================\n');
+        
+        end
+
+
+        %% ========== Beam Transition / Replay Buffer 출력 ==========
+        function printBeamTransition(beam)
+        
+            agent = beam.Agent;
+            buffer = agent.ReplayBuffer;
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Beam Transition - Beam %d\n', beam.Id);
+            fprintf('============================================================\n');
+        
+            fprintf('  Associated UT            : %d\n', beam.AssociatedUTId);
+            fprintf('  Replay Buffer Count      : %d / %d\n', ...
+                buffer.Count, ...
+                buffer.Capacity);
+        
+            fprintf('  Next Buffer Position     : %d\n', ...
+                buffer.Position);
+        
+        
+            %% ============================================================
+            %  마지막으로 저장된 Transition Index
+            % =============================================================
+            if buffer.Count == 0
+                fprintf('\n');
+                fprintf('  Replay Buffer is Empty\n');
+                fprintf('============================================================\n');
+                return;
+            end
+        
+        
+            % Position은 "다음에 저장할 위치"이므로,
+            % 마지막 저장 위치는 Position - 1
+            lastIndex = buffer.Position - 1;
+        
+            if lastIndex == 0
+                lastIndex = buffer.Capacity;
+            end
+        
+        
+            %% ============================================================
+            %  마지막 Transition 가져오기
+            % =============================================================
+            state = buffer.States{lastIndex};
+            action = buffer.Actions(lastIndex);
+            reward = buffer.Rewards(lastIndex);
+            nextState = buffer.NextStates{lastIndex};
+        
+        
+            fprintf('\n');
+            fprintf('  [Last Stored Transition]\n');
+        
+            fprintf('    Buffer Index           : %d\n', lastIndex);
+            fprintf('    Action a_t             : %d\n', action);
+            fprintf('    Reward r_t             : %.2f\n', reward);
+        
+        
+            %% State Size
+            fprintf('    State S_t Size         : ');
+            DebugHelper.printArraySize(state);
+        
+        
+            %% Next State Size
+            fprintf('    Next State S_t+1 Size  : ');
+            DebugHelper.printArraySize(nextState);
+        
+        
+            %% ============================================================
+            %  State 최신 Row 확인
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [State S_t - Latest Observation Row]\n');
+        
+            DebugHelper.printStateFirstRow(state);
+        
+        
+            fprintf('\n');
+            fprintf('  [Next State S_t+1 - Latest Observation Row]\n');
+        
+            DebugHelper.printStateFirstRow(nextState);
+        
+        
+            %% ============================================================
+            %  State 변화 여부
+            % =============================================================
+            if isequal(state, nextState)
+        
+                fprintf('\n');
+                fprintf('  [State Transition Check]\n');
+                fprintf('    State Changed          : NO\n');
+        
+            else
+        
+                fprintf('\n');
+                fprintf('  [State Transition Check]\n');
+                fprintf('    State Changed          : YES\n');
+        
+            end
+        
+        
+            %% ============================================================
+            %  Pending Transition 초기화 여부
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Pending Transition Status]\n');
+        
+            if isempty(agent.PendingState)
+                fprintf('    Pending State          : Cleared\n');
+            else
+                fprintf('    Pending State          : Remains\n');
+            end
+        
+            if isempty(agent.PendingAction)
+                fprintf('    Pending Action         : Cleared\n');
+            else
+                fprintf('    Pending Action         : Remains\n');
+            end
+        
+            if isempty(agent.PendingReward)
+                fprintf('    Pending Reward         : Cleared\n');
+            else
+                fprintf('    Pending Reward         : Remains\n');
+            end
+        
+        
+            fprintf('============================================================\n');
+        
+        end
+        
+        
+        %% ========== Array Size 출력 ==========
+        function printArraySize(array)
+        
+            arraySize = size(array);
+        
+            for dimensionIndex = 1:numel(arraySize)
+        
+                if dimensionIndex > 1
+                    fprintf(' x ');
+                end
+        
+                fprintf('%d', arraySize(dimensionIndex));
+        
+            end
+        
+            fprintf('\n');
+        
+        end
+        
+        
+        %% ========== State 첫 번째 Row 출력 ==========
+        function printStateFirstRow(state)
+        
+            % O mode
+            if ndims(state) == 2
+        
+                fprintf('    O :');
+        
+                for channelIndex = 1:size(state, 2)
+                    fprintf(' %8.2f', state(1, channelIndex));
+                end
+        
+                fprintf('\n');
+        
+        
+            % OA / OAH mode
+            else
+        
+                numStateChannels = size(state, 3);
+        
+        
+                % Observation
+                fprintf('    O :');
+        
+                for channelIndex = 1:size(state, 2)
+                    fprintf(' %8.2f', state(1, channelIndex, 1));
+                end
+        
+                fprintf('\n');
+        
+        
+                % Action
+                if numStateChannels >= 2
+        
+                    fprintf('    A :');
+        
+                    for channelIndex = 1:size(state, 2)
+                        fprintf(' %8.0f', state(1, channelIndex, 2));
+                    end
+        
+                    fprintf('\n');
+        
+                end
+        
+        
+                % HARQ
+                if numStateChannels >= 3
+        
+                    fprintf('    H :');
+        
+                    for channelIndex = 1:size(state, 2)
+                        fprintf(' %8.0f', state(1, channelIndex, 3));
+                    end
+        
+                    fprintf('\n');
+        
+                end
+        
+            end
+        
+        end
+
+
+        %% ========== Agent Training 결과 출력 ==========
+        function printAgentTraining(beam, lossValue, trainingInfo)
+        
+            agent = beam.Agent;
+            buffer = agent.ReplayBuffer;
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Agent Training - Beam %d\n', beam.Id);
+            fprintf('============================================================\n');
+        
+            fprintf('  Replay Buffer Count      : %d / %d\n', ...
+                buffer.Count, buffer.Capacity);
+        
+            fprintf('  Batch Size               : %d\n', ...
+                agent.BatchSize);
+        
+            fprintf('  Training Step            : %d\n', ...
+                agent.TrainingStep);
+        
+            fprintf('  Epsilon                  : %.6f\n', ...
+                agent.Epsilon);
+        
+        
+            %% ============================================================
+            % Training
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Training]\n');
+        
+            if isempty(lossValue)
+        
+                fprintf('    Status                 : SKIPPED\n');
+        
+                if buffer.Count < agent.BatchSize
+                    fprintf('    Reason                 : Replay Buffer not ready\n');
+                    fprintf('    Required Samples       : %d\n', agent.BatchSize);
+                    fprintf('    Current Samples        : %d\n', buffer.Count);
+                end
+        
+            else
+        
+                fprintf('    Status                 : EXECUTED\n');
+                fprintf('    Loss                   : %.8f\n', lossValue);
+        
+                fprintf('    Mean Q-Value           : %.6f\n', ...
+                    trainingInfo.MeanQValue);
+        
+                fprintf('    Max Q-Value            : %.6f\n', ...
+                    trainingInfo.MaxQValue);
+        
+                fprintf('    Mean Target Q-Value    : %.6f\n', ...
+                    trainingInfo.MeanTargetQValue);
+        
+            end
+        
+        
+            %% ============================================================
+            % Moving Statistics
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Recent Performance]\n');
+        
+            windowSize = 100;
+        
+            numSamples = numel(agent.OutcomeHistory);
+        
+            if numSamples > 0
+        
+                startIndex = max(1, numSamples - windowSize + 1);
+        
+                recentOutcomes = ...
+                    agent.OutcomeHistory(startIndex:end);
+        
+                recentRewards = ...
+                    agent.RewardHistory(startIndex:end);
+        
+                ackRatio = mean(recentOutcomes);
+                averageReward = mean(recentRewards);
+        
+                actualWindowSize = numel(recentOutcomes);
+        
+                fprintf('    Window Size            : %d\n', ...
+                    actualWindowSize);
+        
+                fprintf('    ACK Ratio              : %.2f %%\n', ...
+                    ackRatio * 100);
+        
+                fprintf('    Average Reward         : %.4f\n', ...
+                    averageReward);
+        
+            else
+        
+                fprintf('    No performance data\n');
+        
+            end
+        
+        
+            %% ============================================================
+            % Target Network
+            % =============================================================
+            fprintf('\n');
+            fprintf('  [Target Network]\n');
+        
+            if agent.TrainingStep > 0 && ...
+               mod(agent.TrainingStep, agent.TargetUpdateFrequency) == 0
+        
+                fprintf('    Target Update          : YES\n');
+        
+            else
+        
+                fprintf('    Target Update          : NO\n');
+        
+            end
+        
+            fprintf('============================================================\n');
+        
+        end
+
+        %% ========== Beam별 HARQ Summary 출력 ==========
+        function printPerBeamHARQSummary(beamACKCount, beamNACKCount)
+        
+            numBeams = numel(beamACKCount);
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Per-Beam HARQ Summary\n');
+            fprintf('============================================================\n');
+        
+            totalACK = sum(beamACKCount);
+            totalNACK = sum(beamNACKCount);
+            totalTransmissions = totalACK + totalNACK;
+        
+            fprintf('  Number of Beams          : %d\n', numBeams);
+            fprintf('  Total Transmissions      : %d\n', totalTransmissions);
+        
+            fprintf('\n');
+            fprintf('  [Per-Beam ACK Ratio]\n');
+        
+            for beamIndex = 1:numBeams
+        
+                ackCount = beamACKCount(beamIndex);
+                nackCount = beamNACKCount(beamIndex);
+        
+                numTransmissions = ...
+                    ackCount + nackCount;
+        
+                if numTransmissions > 0
+                    ackRatio = ...
+                        ackCount / numTransmissions;
+                else
+                    ackRatio = 0;
+                end
+        
+                fprintf( ...
+                    '    Beam %2d | ACK: %4d | NACK: %4d | ACK Ratio: %6.2f %%\n', ...
+                    beamIndex, ...
+                    ackCount, ...
+                    nackCount, ...
+                    ackRatio * 100 ...
+                );
+        
+            end
+        
+        
+            %% ============================================================
+            % 평균 / 최저 / 최고 Beam
+            % =============================================================
+            ackRatios = zeros(1, numBeams);
+        
+            for beamIndex = 1:numBeams
+        
+                numTransmissions = ...
+                    beamACKCount(beamIndex) + ...
+                    beamNACKCount(beamIndex);
+        
+                if numTransmissions > 0
+                    ackRatios(beamIndex) = ...
+                        beamACKCount(beamIndex) / numTransmissions;
+                end
+        
+            end
+        
+        
+            [minimumRatio, minimumBeamId] = min(ackRatios);
+            [maximumRatio, maximumBeamId] = max(ackRatios);
+        
+            fprintf('\n');
+            fprintf('  [Beam Statistics]\n');
+        
+            fprintf('    Mean ACK Ratio         : %6.2f %%\n', ...
+                mean(ackRatios) * 100);
+        
+            fprintf('    Minimum ACK Ratio      : %6.2f %% (Beam %d)\n', ...
+                minimumRatio * 100, ...
+                minimumBeamId);
+        
+            fprintf('    Maximum ACK Ratio      : %6.2f %% (Beam %d)\n', ...
+                maximumRatio * 100, ...
+                maximumBeamId);
+        
+            fprintf('============================================================\n');
+        
+        end
+
+        % ========== Q-Value 출력 ==========
+        function printQValues(agent, beamId)
+        
+            if isempty(agent.CurrentState)
+                fprintf("Q-Value 출력 불가: CurrentState가 비어 있습니다.\n");
+                return;
+            end
+        
+            % 현재 State -> dlarray
+            dlState = agent.convertStateToDLArray(agent.CurrentState);
+        
+            % Q-Network 추론
+            dlQValues = predict(agent.QNetwork, dlState);
+        
+            % 일반 배열로 변환
+            qValues = extractdata(dlQValues);
+            qValues = qValues(:);
+        
+            % Greedy Action
+            [maxQ, greedyAction] = max(qValues);
+        
+            % 두 번째로 큰 Q
+            sortedQ = sort(qValues, 'descend');
+        
+            if numel(sortedQ) >= 2
+                qGap = sortedQ(1) - sortedQ(2);
+            else
+                qGap = NaN;
+            end
+        
+            fprintf("\n");
+            fprintf("============================================================\n");
+            fprintf("Q-Values - Beam %d\n", beamId);
+            fprintf("============================================================\n");
+        
+            for action = 1:numel(qValues)
+        
+                if action == greedyAction
+                    fprintf("  Channel %2d : %10.6f  <-- Greedy\n", ...
+                        action, qValues(action));
+                else
+                    fprintf("  Channel %2d : %10.6f\n", ...
+                        action, qValues(action));
+                end
+        
+            end
+        
+            fprintf("\n");
+            fprintf("  Greedy Action           : Channel %d\n", greedyAction);
+            fprintf("  Maximum Q-Value         : %.6f\n", maxQ);
+            fprintf("  Q Gap (1st - 2nd)       : %.6f\n", qGap);
+            fprintf("============================================================\n");
+        
+        end
+
+        % ============================================================
+        % 매 슬롯 Beam의 Greedy Action / Q-gap 기록
+        % ============================================================
+        function recordBeamPolicy(slotIndex, qValues)
+            persistent greedyLog gapLog slotLog
+    
+            if isempty(greedyLog)
+                greedyLog = [];
+                gapLog = [];
+                slotLog = [];
+            end
+    
+            if isempty(qValues)
+                return;  % Random 선택이었던 슬롯은 기록 제외 (DQN 판단만 보고 싶으므로)
+            end
+    
+            [sortedQ, idx] = sort(qValues(:), 'descend');
+            greedyLog(end+1) = idx(1);
+            gapLog(end+1) = sortedQ(1) - sortedQ(2);
+            slotLog(end+1) = slotIndex;
+    
+            % 다음 호출을 위해 base workspace에도 저장 (printSummary에서 재사용)
+            assignin('base', 'DebugGreedyLog', greedyLog);
+            assignin('base', 'DebugGapLog', gapLog);
+            assignin('base', 'DebugSlotLog', slotLog);
+        end
+    
+        % ============================================================
+        % 기록된 Greedy Action 이력 요약 출력
+        % ============================================================
+        function printBeamPolicySummary()
+            greedyLog = evalin('base', 'DebugGreedyLog');
+            gapLog = evalin('base', 'DebugGapLog');
+    
+            if isempty(greedyLog)
+                fprintf('기록된 정책 데이터가 없습니다.\n');
+                return;
+            end
+    
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Beam Policy Trace Summary (DQN 판단만 집계, Random 제외)\n');
+            fprintf('============================================================\n');
+            fprintf('  총 기록 슬롯 수         : %d\n', numel(greedyLog));
+    
+            uniqueChannels = unique(greedyLog);
+            fprintf('  선택된 서로 다른 채널 수 : %d\n', numel(uniqueChannels));
+            fprintf('\n  [채널별 선택 빈도]\n');
+            for ch = uniqueChannels
+                cnt = sum(greedyLog == ch);
+                fprintf('    Channel %2d : %4d회 (%.1f%%)\n', ch, cnt, 100*cnt/numel(greedyLog));
+            end
+    
+            changes = sum(diff(greedyLog) ~= 0);
+            fprintf('\n  연속 슬롯 간 Greedy Action이 바뀐 비율 : %d / %d (%.1f%%)\n', ...
+                changes, numel(greedyLog)-1, 100*changes/(numel(greedyLog)-1));
+            fprintf('  평균 Q-gap (1등-2등)                   : %.4f\n', mean(gapLog));
+            fprintf('============================================================\n');
+        end
+
+        % ============================================================
+        % 매 슬롯 전체 Beam의 채널 선택을 기록
+        % ============================================================
+        function recordAllBeamsPolicy(slotIndex, Satellite)
+            persistent allChoices allSlots
+            if isempty(allChoices)
+                allChoices = {}; allSlots = [];
+            end
+    
+            choices = zeros(1, numel(Satellite.Beams));
+            for b = 1:numel(Satellite.Beams)
+                choices(b) = Satellite.Beams(b).SelectedChannel;
+            end
+            allChoices{end+1} = choices;
+            allSlots(end+1) = slotIndex;
+    
+            assignin('base', 'DebugAllChoices', allChoices);
+            assignin('base', 'DebugAllSlots', allSlots);
+        end
+    
+        % ============================================================
+        % 충돌 패턴 요약: 슬롯별 충돌 빔 수, 그리고 시간에 따른 추세
+        % ============================================================
+        function printCollisionSummary(numChannels)
+            allChoices = evalin('base', 'DebugAllChoices');
+            allSlots = evalin('base', 'DebugAllSlots');
+    
+            if isempty(allChoices)
+                fprintf('기록된 채널 선택 데이터가 없습니다.\n');
+                return;
+            end
+    
+            numSlots = numel(allChoices);
+            collidedBeamCount = zeros(1, numSlots);  % 이 슬롯에 "충돌한(=같은 채널을 2개 이상이 쓴)" 빔 개수
+    
+            for s = 1:numSlots
+                choices = allChoices{s};
+                counts = histcounts(choices, 0.5:1:(numChannels+0.5));  % 채널별 사용 빔 수
+                collidedBeamCount(s) = sum(counts(counts >= 2));  % 충돌에 연루된 빔 총합
+            end
+    
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('Beam Collision Pattern Summary\n');
+            fprintf('============================================================\n');
+            fprintf('  총 기록 슬롯 수                : %d\n', numSlots);
+            fprintf('  전체 평균 충돌 빔 수/슬롯       : %.2f\n', mean(collidedBeamCount));
+    
+            % 전반부 vs 후반부 비교 (학습이 진행되며 충돌이 줄어드는지)
+            half = floor(numSlots/2);
+            firstHalfMean = mean(collidedBeamCount(1:half));
+            secondHalfMean = mean(collidedBeamCount(half+1:end));
+            fprintf('  전반부 평균 충돌 빔 수          : %.2f\n', firstHalfMean);
+            fprintf('  후반부 평균 충돌 빔 수          : %.2f\n', secondHalfMean);
+    
+            if secondHalfMean < firstHalfMean * 0.8
+                fprintf('  => 충돌이 시간에 따라 뚜렷이 감소 (수렴 신호)\n');
+            elseif secondHalfMean > firstHalfMean * 1.2
+                fprintf('  => 충돌이 오히려 증가 (추격전/발산 신호)\n');
+            else
+                fprintf('  => 충돌 수준이 거의 안 바뀜 (정체/추격전 신호)\n');
+            end
+    
+            % 마지막 100슬롯만 따로 (수렴했다면 여기서 낮아야 정상)
+            last100 = collidedBeamCount(max(1,numSlots-99):end);
+            fprintf('  마지막 100슬롯 평균 충돌 빔 수  : %.2f\n', mean(last100));
+            fprintf('============================================================\n');
+        end
+
+
         
 
     end

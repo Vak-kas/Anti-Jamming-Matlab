@@ -40,7 +40,7 @@ classdef Beam < handle
             obj.AssociatedUTId = associatedUTId;
 
             obj.StateManager = StateManager(numChannels, phi, observationMode);
-            obj.Agent = [];
+            obj.Agent = BeamAgent(obj);
         end
 
         % ========== 빔 중심 주파수 가져오기 ==========
@@ -114,7 +114,7 @@ classdef Beam < handle
 
 
         %% ========== UT Feedback 수신 및 State 업데이트 ==========
-        function receiveFeedback(obj, ControlChannels, Satellite)
+        function isACK = receiveFeedback(obj, ControlChannels, Satellite)
             selectedChannel = obj.SelectedChannel; % 이번 Slot에서 Beam이 사용한 채널
             packets = ControlChannels(selectedChannel).getPackets(); % 동일한 Control Channel 확인
         
@@ -148,6 +148,8 @@ classdef Beam < handle
         
             % State 업데이트
             obj.StateManager.update(observation, action, harq);
+
+            isACK = harq == PacketType.ACK;
         
         end
 
