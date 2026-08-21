@@ -364,5 +364,137 @@ classdef FigureHelper
 
         end
 
+
+        % ============================================================
+        % Beam1(Target UT) 실시간 성공률(ACK ratio) 출력
+        % ------------------------------------------------------------
+        % 호출 예 (TimeSlot.run 등에서 한 줄만 추가):
+        %   FigureHelper.plotBeam1SuccessRate(slotIndex, actualTargetACK);
+        %
+        % persistent 변수로 Figure/버퍼 상태를 유지하므로,
+        % 매 슬롯 이 한 줄만 호출하면 알아서 창을 만들고 갱신합니다.
+        % ============================================================
+        function plotBeam1SuccessRate(slotIndex, isACK, shortWindow, emaSpan)
+            % 하위 호환용 wrapper — 내부적으로 plotSuccessRate 호출
+            if nargin < 3, shortWindow = []; end
+            if nargin < 4, emaSpan = []; end
+            FigureHelper.plotSuccessRate(slotIndex, isACK, 'Beam1 (Target UT)', shortWindow, emaSpan);
+        end
+
+        % ============================================================
+        % 임의의 지표(0~1 사이 값)에 대한 실시간 성공률 플롯 (범용)
+        % ------------------------------------------------------------
+        % 호출 예:
+        %   FigureHelper.plotSuccessRate(slotIndex, actualTargetACK, 'Beam1 (Target UT)');
+        %   FigureHelper.plotSuccessRate(slotIndex, successRatio, 'All UTs (Aggregate)');
+        %
+        % seriesName마다 별도 Figure/버퍼 상태를 유지하므로(내부적으로
+        % containers.Map 사용), 같은 파일에서 여러 지표를 동시에
+        % 각자의 창에 실시간으로 그릴 수 있습니다.
+        % ============================================================
+        function plotSuccessRate(slotIndex, value, seriesName, shortWindow, emaSpan)
+
+            persistent stateMap
+
+            if nargin < 4 || isempty(shortWindow)
+                shortWindow = 100;
+            end
+            if nargin < 5 || isempty(emaSpan)
+                emaSpan = 200;
+            end
+            alpha = 2 / (emaSpan + 1);
+
+            if isempty(stateMap)
+                stateMap = containers.Map('KeyType', 'char', 'ValueType', 'any');
+            end
+
+            %% =====================================================
+            % 이 seriesName의 Figure 최초 1회 생성
+            % ======================================================
+            needsInit = ~isKey(stateMap, seriesName);
+            if ~needsInit
+                s = stateMap(seriesName);
+                needsInit = ~isvalid(s.figHandle);
+            end
+
+            if needsInit
+                s = struct();
+
+                s.figHandle = figure( ...
+                    'Name', sprintf('%s 실시간 성공률', seriesName), ...
+                    'NumberTitle', 'off' ...
+                );
+
+                s.axHandle = axes(s.figHandle);
+                hold(s.axHandle, 'on');
+                grid(s.axHandle, 'on');
+                s.axHandle.GridAlpha = 0.15;
+
+                ylim(s.axHandle, [0 1]);
+                xlabel(s.axHandle, 'Time Slot', 'FontSize', 12);
+                ylabel(s.axHandle, sprintf('%s Ratio', seriesName), 'FontSize', 12);
+                title(s.axHandle, ...
+                    sprintf('%s 실시간 성공률', seriesName), ...
+                    'FontSize', 14, 'FontWeight', 'bold');
+
+                s.rawLine = animatedline(s.axHandle, ...
+                    'LineStyle', 'none', ...
+                    'Marker', '.', ...
+                    'MarkerSize', 4, ...
+                    'Color', [0.85 0.85 0.85], ...
+                    'DisplayName', 'Per-slot value');
+
+                % 노이즈 많은 실시간 곡선 → 회색, 얇게
+                s.shortLine = animatedline(s.axHandle, ...
+                    'Color', [0.55 0.55 0.55], ...
+                    'LineWidth', 1.0, ...
+                    'DisplayName', sprintf('Noisy rolling (window=%d)', shortWindow));
+
+                % 매끈한 평균 곡선 → 파란색, 굵게 (EMA)
+                s.longLine = animatedline(s.axHandle, ...
+                    'Color', [0.00 0.30 0.80], ...
+                    'LineWidth', 2.2, ...
+                    'DisplayName', sprintf('Smoothed EMA (span=%d)', emaSpan));
+
+                legend(s.axHandle, 'Location', 'southeast');
+
+                s.history = [];
+                s.emaValue = [];
+
+                stateMap(seriesName) = s;
+            end
+
+            s = stateMap(seriesName);
+
+            %% =====================================================
+            % 짧은 윈도우(노이즈) 갱신
+            % ======================================================
+            s.history(end+1) = double(value); %#ok<AGROW>
+            n = numel(s.history);
+            shortRatio = mean(s.history(max(1, n-shortWindow+1):n));
+
+            addpoints(s.rawLine, slotIndex, double(value));
+            addpoints(s.shortLine, slotIndex, shortRatio);
+
+            %% =====================================================
+            % EMA 갱신 — 첫 슬롯부터 바로 값이 생김 (대기 없음)
+            % ======================================================
+            if isempty(s.emaValue)
+                s.emaValue = double(value);
+            else
+                s.emaValue = alpha * double(value) + (1 - alpha) * s.emaValue;
+            end
+            addpoints(s.longLine, slotIndex, s.emaValue);
+
+            xlim(s.axHandle, [1, max(slotIndex, shortWindow)]);
+
+            if mod(slotIndex, 5) == 0 || slotIndex == 1
+                drawnow limitrate;
+            end
+
+            stateMap(seriesName) = s;
+
+        end
+
     end
 end

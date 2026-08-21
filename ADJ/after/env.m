@@ -74,7 +74,7 @@ apjTxPower_dBm = 37; % APJ 전송 파워
 
 apjRxGain_dBi = 0;
 apjNoiseFigure_dB = 7;
-apjSINRThreshold_dB = 14;
+apjSINRThreshold_dB = 12.5;
 
 %% ==================== COMMON DRL Parameters ====================
 phi = 10;
@@ -82,7 +82,7 @@ phi = 10;
 %% ==================== Beam DRL Parameters ====================
 beamBatchSize = 128;
 
-beamLearnRate = 0.005;
+beamLearnRate = 0.001;
 beamDiscountFactor = 0.8;
 
 beamReplayBufferCapacity = 5000;
@@ -90,7 +90,7 @@ beamReplayBufferCapacity = 5000;
 
 % Epsilon-greedy
 beamEpsilon = 1.000;
-beamEpsilonMin = 0.05;
+beamEpsilonMin = 0.001;
 beamEpsilonDecay = 0.997;
 
 beamTargetUpdateFrequency = 100;
@@ -103,7 +103,7 @@ beamRewardFunction = @(isACK) double(isACK) * beamSuccessReward + double(~isACK)
 
 
 %% ==================== APJ DRL Parameters ====================
-apjBatchSize = 32;
+apjBatchSize = 128;
 
 apjLearnRate = 0.001;
 apjDiscountFactor = 0.8;
@@ -111,9 +111,9 @@ apjDiscountFactor = 0.8;
 apjReplayBufferCapacity = 10000;
 
 % Epsilon-greedy
-apjEpsilon = 1.000;
-apjEpsilonMin = 0.05;
-apjEpsilonDecay = 0.997;
+apjEpsilon = 0.0;
+apjEpsilonMin = 0.0;
+apjEpsilonDecay = 1.0;
 
 apjTargetUpdateFrequency = 100;
 
@@ -130,4 +130,4 @@ utTxPower_W = 10^((utTxPower_dBm - 30) / 10); % Convert transmit power from dBm 
 apjTxPower_W = 10^((apjTxPower_dBm - 30) / 10); % Convert APJ transmit power from dBm to Watts
 
 % ===== Satellite coverage geometry =====
-% rng(simulationSeed);
+rng(simulationSeed);

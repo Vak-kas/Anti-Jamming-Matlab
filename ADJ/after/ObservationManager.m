@@ -101,6 +101,11 @@ classdef ObservationManager < handle
             noisePower_W = obj.Owner.k * obj.Owner.NoiseTemperature * bandwidth_Hz * noiseFigure_linear;
         end
 
+        % ========== 현재 Observation 반환 ==========
+        function observation = getCurrentObservation(obj)
+            observation = obj.CurrentObservation;
+        end
+
 
 
 

@@ -1402,120 +1402,95 @@ classdef DebugHelper
 
         %% ========== Agent Training 결과 출력 ==========
         function printAgentTraining(beam, lossValue, trainingInfo)
+
+            fprintf("\n");
+            fprintf("============================================================\n");
+            fprintf("Agent Training - Beam %d\n", beam.Id);
+            fprintf("============================================================\n");
         
-            agent = beam.Agent;
-            buffer = agent.ReplayBuffer;
+            fprintf("  Replay Buffer Count      : %d / %d\n", ...
+                beam.Agent.ReplayBuffer.Count, ...
+                beam.Agent.ReplayBuffer.Capacity);
         
-            fprintf('\n');
-            fprintf('============================================================\n');
-            fprintf('Agent Training - Beam %d\n', beam.Id);
-            fprintf('============================================================\n');
+            fprintf("  Batch Size               : %d\n", ...
+                beam.Agent.BatchSize);
         
-            fprintf('  Replay Buffer Count      : %d / %d\n', ...
-                buffer.Count, buffer.Capacity);
+            fprintf("  Training Step            : %d\n", ...
+                beam.Agent.TrainingStep);
         
-            fprintf('  Batch Size               : %d\n', ...
-                agent.BatchSize);
-        
-            fprintf('  Training Step            : %d\n', ...
-                agent.TrainingStep);
-        
-            fprintf('  Epsilon                  : %.6f\n', ...
-                agent.Epsilon);
+            fprintf("  Epsilon                  : %.6f\n", ...
+                beam.Agent.Epsilon);
         
         
-            %% ============================================================
-            % Training
-            % =============================================================
-            fprintf('\n');
-            fprintf('  [Training]\n');
+            fprintf("\n");
+            fprintf("  [Training]\n");
         
             if isempty(lossValue)
         
-                fprintf('    Status                 : SKIPPED\n');
-        
-                if buffer.Count < agent.BatchSize
-                    fprintf('    Reason                 : Replay Buffer not ready\n');
-                    fprintf('    Required Samples       : %d\n', agent.BatchSize);
-                    fprintf('    Current Samples        : %d\n', buffer.Count);
-                end
+                fprintf("    Status                 : SKIPPED\n");
+                fprintf("    Reason                 : Replay Buffer not ready\n");
         
             else
         
-                fprintf('    Status                 : EXECUTED\n');
-                fprintf('    Loss                   : %.8f\n', lossValue);
+                fprintf("    Status                 : EXECUTED\n");
+                fprintf("    Loss                   : %.8f\n", lossValue);
         
-                fprintf('    Mean Q-Value           : %.6f\n', ...
+                fprintf("    Mean Q-Value           : %.6f\n", ...
                     trainingInfo.MeanQValue);
         
-                fprintf('    Max Q-Value            : %.6f\n', ...
+                fprintf("    Max Q-Value            : %.6f\n", ...
                     trainingInfo.MaxQValue);
         
-                fprintf('    Mean Target Q-Value    : %.6f\n', ...
+                fprintf("    Mean Target Q-Value    : %.6f\n", ...
                     trainingInfo.MeanTargetQValue);
         
             end
         
         
             %% ============================================================
-            % Moving Statistics
-            % =============================================================
-            fprintf('\n');
-            fprintf('  [Recent Performance]\n');
-        
-            windowSize = 100;
-        
-            numSamples = numel(agent.OutcomeHistory);
-        
-            if numSamples > 0
-        
-                startIndex = max(1, numSamples - windowSize + 1);
-        
-                recentOutcomes = ...
-                    agent.OutcomeHistory(startIndex:end);
-        
-                recentRewards = ...
-                    agent.RewardHistory(startIndex:end);
-        
-                ackRatio = mean(recentOutcomes);
-                averageReward = mean(recentRewards);
-        
-                actualWindowSize = numel(recentOutcomes);
-        
-                fprintf('    Window Size            : %d\n', ...
-                    actualWindowSize);
-        
-                fprintf('    ACK Ratio              : %.2f %%\n', ...
-                    ackRatio * 100);
-        
-                fprintf('    Average Reward         : %.4f\n', ...
-                    averageReward);
-        
-            else
-        
-                fprintf('    No performance data\n');
-        
-            end
-        
-        
+            % 현재 Beam State에 대한 Q-values
             %% ============================================================
-            % Target Network
-            % =============================================================
-            fprintf('\n');
-            fprintf('  [Target Network]\n');
         
-            if agent.TrainingStep > 0 && ...
-               mod(agent.TrainingStep, agent.TargetUpdateFrequency) == 0
+            currentState = beam.StateManager.getState();
         
-                fprintf('    Target Update          : YES\n');
+            % Beam1은 첫 번째 순차 선택자이므로 현재 occupancy = 0
+            currentOccupancy = zeros(1, beam.Agent.NumActions);
         
-            else
+            dlState = beam.Agent.convertStateToDLArray(currentState);
         
-                fprintf('    Target Update          : NO\n');
+            dlOccupancy = ...
+                beam.Agent.convertOccupancyToDLArray(currentOccupancy);
+        
+            dlQValues = predict( ...
+                beam.Agent.QNetwork, ...
+                dlState, ...
+                dlOccupancy ...
+            );
+        
+            qValues = extractdata(dlQValues);
+            qValues = qValues(:);
+        
+        
+            fprintf("\n");
+            fprintf("  [Current Q-Values]\n");
+        
+            [~, greedyAction] = max(qValues);
+        
+            for channelIndex = 1:numel(qValues)
+        
+                fprintf("    CH %2d : %10.6f", ...
+                    channelIndex, ...
+                    qValues(channelIndex));
+        
+                if channelIndex == greedyAction
+                    fprintf("  <-- Greedy");
+                end
+        
+                fprintf("\n");
         
             end
         
-            fprintf('============================================================\n');
+            fprintf("============================================================\n");
         
         end
 
@@ -1787,6 +1762,563 @@ classdef DebugHelper
             last100 = collidedBeamCount(max(1,numSlots-99):end);
             fprintf('  마지막 100슬롯 평균 충돌 빔 수  : %.2f\n', mean(last100));
             fprintf('============================================================\n');
+        end
+
+        %% ========== APJ SINR 추정 과정 출력 ==========
+        function printAPJSINREstimation( ...
+                APJ, ...
+                targetPacket, ...
+                centerFrequency_Hz, ...
+                bandwidth_Hz, ...
+                distance, ...
+                desiredTxPower_dBm, ...
+                desiredTxGain_dBi, ...
+                desiredPower_W, ...
+                interferencePackets, ...
+                interferenceGain_dBi, ...
+                interferencePowerEach_W, ...
+                interferencePower_W, ...
+                noisePower_W, ...
+                SINR_dB)
+        
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('APJ SINR Estimation - APJ %d\n', APJ.Id);
+            fprintf('============================================================\n');
+        
+            %% 기본 정보
+            fprintf('  Target UT ID             : %d\n', APJ.TargetUTId);
+            fprintf('  Observed Channel         : %d\n', targetPacket.ChannelId);
+            fprintf('  Target Beam ID           : %d\n', targetPacket.BeamId);
+        
+            fprintf('  Center Frequency         : %.3f MHz\n', ...
+                centerFrequency_Hz / 1e6);
+        
+            fprintf('  Channel Bandwidth        : %.3f kHz\n', ...
+                bandwidth_Hz / 1e3);
+        
+            fprintf('\n');
+        
+            %% APJ 위치
+            fprintf('  [APJ Geometry]\n');
+        
+            fprintf('    Position               : (%.2f, %.2f, %.2f) km\n', ...
+                APJ.Position(1) / 1e3, ...
+                APJ.Position(2) / 1e3, ...
+                APJ.Position(3) / 1e3);
+        
+            fprintf('    Satellite Distance     : %.3f km\n', ...
+                distance / 1e3);
+        
+            fprintf('\n');
+        
+            %% Desired Signal
+            fprintf('  [Desired Signal]\n');
+        
+            fprintf('    Beam ID                : %d\n', ...
+                targetPacket.BeamId);
+        
+            fprintf('    Tx Power               : %.3f dBm\n', ...
+                desiredTxPower_dBm);
+        
+            fprintf('    Tx Gain @ APJ          : %.3f dBi\n', ...
+                desiredTxGain_dBi);
+        
+            fprintf('    APJ Rx Gain            : %.3f dBi\n', ...
+                APJ.RxGain_dBi);
+        
+            fprintf('    Received Power         : %.3e W\n', ...
+                desiredPower_W);
+        
+            fprintf('                           : %.3f dBm\n', ...
+                DebugHelper.wattToDbm(desiredPower_W));
+        
+            fprintf('\n');
+        
+            %% Interference
+            fprintf('  [Interference]\n');
+        
+            numInterference = numel(interferencePackets);
+        
+            fprintf('    Number of Interferers  : %d\n', ...
+                numInterference);
+        
+            if numInterference == 0
+        
+                fprintf('    No co-channel interfering beam\n');
+        
+            else
+        
+                for interferenceIndex = 1:numInterference
+        
+                    packet = interferencePackets(interferenceIndex);
+        
+                    fprintf('\n');
+                    fprintf('    Interferer %d\n', interferenceIndex);
+        
+                    fprintf('      Beam ID              : %d\n', ...
+                        packet.BeamId);
+        
+                    fprintf('      Channel              : %d\n', ...
+                        packet.ChannelId);
+        
+                    fprintf('      Tx Gain @ APJ        : %.3f dBi\n', ...
+                        interferenceGain_dBi(interferenceIndex));
+        
+                    fprintf('      Received Power       : %.3e W\n', ...
+                        interferencePowerEach_W(interferenceIndex));
+        
+                    fprintf('                           : %.3f dBm\n', ...
+                        DebugHelper.wattToDbm( ...
+                            interferencePowerEach_W(interferenceIndex)));
+        
+                end
+            end
+        
+            fprintf('\n');
+        
+            fprintf('    Total Interference     : %.3e W\n', ...
+                interferencePower_W);
+        
+            if interferencePower_W > 0
+                fprintf('                           : %.3f dBm\n', ...
+                    DebugHelper.wattToDbm(interferencePower_W));
+            else
+                fprintf('                           : -Inf dBm\n');
+            end
+        
+            fprintf('\n');
+        
+            %% Noise
+            fprintf('  [Noise]\n');
+        
+            fprintf('    Noise Temperature      : %.2f K\n', ...
+                APJ.NoiseTemperature);
+        
+            fprintf('    Noise Figure           : %.2f dB\n', ...
+                APJ.NoiseFigure_dB);
+        
+            fprintf('    Noise Power            : %.3e W\n', ...
+                noisePower_W);
+        
+            fprintf('                           : %.3f dBm\n', ...
+                DebugHelper.wattToDbm(noisePower_W));
+        
+            fprintf('\n');
+        
+            %% 최종 SINR
+            fprintf('  [Estimated SINR]\n');
+        
+            fprintf('    Desired Power          : %.3f dBm\n', ...
+                DebugHelper.wattToDbm(desiredPower_W));
+        
+            if interferencePower_W > 0
+                fprintf('    Interference Power     : %.3f dBm\n', ...
+                    DebugHelper.wattToDbm(interferencePower_W));
+            else
+                fprintf('    Interference Power     : -Inf dBm\n');
+            end
+        
+            fprintf('    Noise Power            : %.3f dBm\n', ...
+                DebugHelper.wattToDbm(noisePower_W));
+        
+            fprintf('    Estimated SINR         : %.3f dB\n', ...
+                SINR_dB);
+        
+            fprintf('    SINR Threshold         : %.3f dB\n', ...
+                APJ.SINRThreshold_dB);
+        
+            if SINR_dB >= APJ.SINRThreshold_dB
+                fprintf('    Pseudo HARQ            : ACK\n');
+            else
+                fprintf('    Pseudo HARQ            : NACK\n');
+            end
+        
+            fprintf('============================================================\n');
+        
+        end
+
+        %% ========== Watt -> dBm ==========
+
+        function power_dBm = wattToDbm(power_W)
+        
+            if power_W <= 0
+        
+                power_dBm = -Inf;
+        
+                return;
+        
+            end
+        
+            power_dBm = 10 * log10(power_W) + 30;
+        
+        end
+
+
+        %% ========== APJ Pseudo HARQ Evaluation ==========
+        function printAPJPseudoHARQEvaluation( ...
+                actualACKHistory, ...
+                pseudoACKHistory, ...
+                actualSINRHistory_dB, ...
+                estimatedSINRHistory_dB)
+        
+            %% 1. 유효한 HARQ Sample만 추출
+            validHARQ = ...
+                ~isnan(actualACKHistory) & ...
+                ~isnan(pseudoACKHistory);
+        
+            actualACK = logical(actualACKHistory(validHARQ));
+            pseudoACK = logical(pseudoACKHistory(validHARQ));
+        
+            numHARQSamples = numel(actualACK);
+        
+            if numHARQSamples == 0
+                fprintf('\n');
+                fprintf('============================================================\n');
+                fprintf('APJ Pseudo HARQ Evaluation\n');
+                fprintf('============================================================\n');
+                fprintf('  No valid HARQ samples available.\n');
+                fprintf('============================================================\n');
+                return;
+            end
+        
+        
+            %% 2. Confusion Matrix
+            % Positive = ACK
+            % Negative = NACK
+        
+            TP = sum(actualACK == true  & pseudoACK == true);
+            TN = sum(actualACK == false & pseudoACK == false);
+            FP = sum(actualACK == false & pseudoACK == true);
+            FN = sum(actualACK == true  & pseudoACK == false);
+        
+        
+            %% 3. HARQ Evaluation Metrics
+            accuracy = (TP + TN) / numHARQSamples;
+        
+            if (TP + FP) > 0
+                precision = TP / (TP + FP);
+            else
+                precision = NaN;
+            end
+        
+            if (TP + FN) > 0
+                recall = TP / (TP + FN);
+            else
+                recall = NaN;
+            end
+        
+            if ~isnan(precision) && ~isnan(recall) && ...
+                    (precision + recall) > 0
+        
+                f1Score = ...
+                    2 * precision * recall / ...
+                    (precision + recall);
+        
+            else
+                f1Score = NaN;
+            end
+        
+        
+            %% 4. 실제 / Pseudo ACK Ratio
+            actualACKRatio = mean(actualACK);
+            pseudoACKRatio = mean(pseudoACK);
+        
+        
+            %% 5. SINR 유효 Sample 추출
+            validSINR = ...
+                ~isnan(actualSINRHistory_dB) & ...
+                ~isnan(estimatedSINRHistory_dB);
+        
+            actualSINR = ...
+                actualSINRHistory_dB(validSINR);
+        
+            estimatedSINR = ...
+                estimatedSINRHistory_dB(validSINR);
+        
+            numSINRSamples = numel(actualSINR);
+        
+        
+            %% 6. SINR Error 계산
+            if numSINRSamples > 0
+        
+                % estimated - actual
+                sinrError_dB = ...
+                    estimatedSINR - actualSINR;
+        
+                meanError_dB = ...
+                    mean(sinrError_dB);
+        
+                mae_dB = ...
+                    mean(abs(sinrError_dB));
+        
+                rmse_dB = ...
+                    sqrt(mean(sinrError_dB .^ 2));
+        
+                maxAbsoluteError_dB = ...
+                    max(abs(sinrError_dB));
+        
+                meanActualSINR_dB = ...
+                    mean(actualSINR);
+        
+                meanEstimatedSINR_dB = ...
+                    mean(estimatedSINR);
+        
+            else
+        
+                meanError_dB = NaN;
+                mae_dB = NaN;
+                rmse_dB = NaN;
+                maxAbsoluteError_dB = NaN;
+        
+                meanActualSINR_dB = NaN;
+                meanEstimatedSINR_dB = NaN;
+        
+            end
+        
+        
+            %% 7. 출력
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('APJ Pseudo HARQ Evaluation\n');
+            fprintf('============================================================\n');
+        
+            fprintf('  Number of HARQ Samples   : %d\n', ...
+                numHARQSamples);
+        
+            fprintf('  Number of SINR Samples   : %d\n', ...
+                numSINRSamples);
+        
+        
+            %% HARQ Ground Truth
+            fprintf('\n');
+            fprintf('  [HARQ Distribution]\n');
+        
+            fprintf('    Actual ACK Ratio       : %6.2f %%\n', ...
+                actualACKRatio * 100);
+        
+            fprintf('    Pseudo ACK Ratio       : %6.2f %%\n', ...
+                pseudoACKRatio * 100);
+        
+        
+            %% Confusion Matrix
+            fprintf('\n');
+            fprintf('  [HARQ Confusion Matrix]\n');
+            fprintf('    Positive Class         : ACK\n');
+        
+            fprintf('    TP (ACK  -> ACK)       : %d\n', TP);
+            fprintf('    TN (NACK -> NACK)      : %d\n', TN);
+            fprintf('    FP (NACK -> ACK)       : %d\n', FP);
+            fprintf('    FN (ACK  -> NACK)      : %d\n', FN);
+        
+        
+            %% Prediction Performance
+            fprintf('\n');
+            fprintf('  [HARQ Prediction Performance]\n');
+        
+            fprintf('    Accuracy               : %6.2f %%\n', ...
+                accuracy * 100);
+        
+            fprintf('    Precision              : %6.2f %%\n', ...
+                precision * 100);
+        
+            fprintf('    Recall                 : %6.2f %%\n', ...
+                recall * 100);
+        
+            fprintf('    F1 Score               : %6.2f %%\n', ...
+                f1Score * 100);
+        
+        
+            %% SINR
+            fprintf('\n');
+            fprintf('  [SINR Estimation]\n');
+        
+            fprintf('    Mean Actual SINR       : %8.3f dB\n', ...
+                meanActualSINR_dB);
+        
+            fprintf('    Mean Estimated SINR    : %8.3f dB\n', ...
+                meanEstimatedSINR_dB);
+        
+        
+            fprintf('\n');
+            fprintf('  [SINR Estimation Error]\n');
+        
+            fprintf('    Mean Error             : %+8.3f dB\n', ...
+                meanError_dB);
+        
+            fprintf('    MAE                    : %8.3f dB\n', ...
+                mae_dB);
+        
+            fprintf('    RMSE                   : %8.3f dB\n', ...
+                rmse_dB);
+        
+            fprintf('    Maximum Absolute Error : %8.3f dB\n', ...
+                maxAbsoluteError_dB);
+        
+            fprintf('============================================================\n');
+        
+        end
+
+        function printAPJPredictionQValues(slotIndex, predictedChannel, qValues)
+
+            fprintf("\n");
+            fprintf("============================================================\n");
+            fprintf("APJ Next-Channel Prediction\n");
+            fprintf("============================================================\n");
+        
+            fprintf("  Current Slot             : %d\n", slotIndex);
+            fprintf("  Prediction For           : Slot %d\n", slotIndex + 1);
+            fprintf("  Predicted Channel        : %d\n", predictedChannel);
+        
+            fprintf("\n");
+            fprintf("  [Q-Values]\n");
+        
+            if isempty(qValues)
+                fprintf("    Q-values unavailable (epsilon random action)\n");
+            else
+        
+                for channelIndex = 1:numel(qValues)
+        
+                    fprintf( ...
+                        "    CH %2d : %10.6f", ...
+                        channelIndex, ...
+                        qValues(channelIndex) ...
+                    );
+        
+                    if channelIndex == predictedChannel
+                        fprintf("   <-- Selected");
+                    end
+        
+                    fprintf("\n");
+        
+                end
+        
+                sortedQ = sort(qValues, "descend");
+        
+                if numel(sortedQ) >= 2
+                    qMargin = sortedQ(1) - sortedQ(2);
+        
+                    fprintf("\n");
+                    fprintf("    Top-1 / Top-2 Margin   : %.6f\n", ...
+                        qMargin);
+                end
+        
+            end
+        
+            fprintf("============================================================\n");
+        
+        end
+
+        function printAPJTraining(APJ, slotIndex, observedChannel, ...
+            estimatedSINR_dB, pseudoHARQ, lossValue, trainingInfo, qValues)
+        
+            fprintf("\n");
+            fprintf("============================================================\n");
+            fprintf("APJ Agent Training\n");
+            fprintf("============================================================\n");
+        
+            fprintf("  Slot                     : %d\n", slotIndex);
+        
+            fprintf("\n");
+            fprintf("  [Observation]\n");
+            fprintf("    Observed Channel       : %d\n", observedChannel);
+            fprintf("    Estimated SINR         : %.3f dB\n", estimatedSINR_dB);
+        
+            if pseudoHARQ == PacketType.ACK
+                fprintf("    Pseudo HARQ            : ACK\n");
+            else
+                fprintf("    Pseudo HARQ            : NACK\n");
+            end
+        
+            fprintf("\n");
+            fprintf("  [Training]\n");
+            fprintf("    Replay Buffer Count    : %d\n", ...
+                APJ.Agent.ReplayBuffer.Count);
+            fprintf("    Batch Size             : %d\n", ...
+                APJ.Agent.BatchSize);
+            fprintf("    Training Step          : %d\n", ...
+                APJ.Agent.TrainingStep);
+            fprintf("    Epsilon                : %.6f\n", ...
+                APJ.Agent.Epsilon);
+        
+            if isempty(lossValue)
+                fprintf("    Status                 : WAITING\n");
+                fprintf("    Loss                   : N/A\n");
+            else
+                fprintf("    Status                 : EXECUTED\n");
+                fprintf("    Loss                   : %.8f\n", lossValue);
+                fprintf("    Mean Q-Value           : %.6f\n", ...
+                    trainingInfo.MeanQValue);
+                fprintf("    Max Q-Value            : %.6f\n", ...
+                    trainingInfo.MaxQValue);
+                fprintf("    Mean Target Q-Value    : %.6f\n", ...
+                    trainingInfo.MeanTargetQValue);
+            end
+        
+            fprintf("\n");
+            fprintf("  [Next Channel Prediction]\n");
+            fprintf("    Predicted Channel      : %d\n", ...
+                APJ.PredictedChannel);
+        
+            if ~isempty(qValues)
+                fprintf("\n");
+                fprintf("    Q-Values\n");
+        
+                for channelIndex = 1:numel(qValues)
+                    fprintf("      CH %2d : %10.6f", ...
+                        channelIndex, qValues(channelIndex));
+        
+                    if channelIndex == APJ.PredictedChannel
+                        fprintf("  <-- Predicted");
+                    end
+        
+                    fprintf("\n");
+                end
+            end
+        
+            fprintf("============================================================\n");
+        end
+
+        function recordAPJPrediction(slotIndex, predictedChannel, actualChannel)
+
+            persistent predictionHistory
+        
+            if isempty(predictionHistory)
+                predictionHistory = [];
+            end
+        
+            isCorrect = (predictedChannel == actualChannel);
+        
+            predictionHistory(end + 1) = double(isCorrect);
+        
+            cumulativeAccuracy = mean(predictionHistory) * 100;
+        
+            windowSize = min(100, numel(predictionHistory));
+            recentAccuracy = ...
+                mean(predictionHistory(end-windowSize+1:end)) * 100;
+
+            if mod(slotIndex, 100) == 0
+        
+                fprintf("\n");
+                fprintf("============================================================\n");
+                fprintf("APJ Channel Prediction Evaluation\n");
+                fprintf("============================================================\n");
+                fprintf("  Slot                     : %d\n", slotIndex);
+                fprintf("  Predicted Channel        : %d\n", predictedChannel);
+                fprintf("  Actual Channel           : %d\n", actualChannel);
+            
+                if isCorrect
+                    fprintf("  Result                   : HIT\n");
+                else
+                    fprintf("  Result                   : MISS\n");
+                end
+            
+                fprintf("  Cumulative Accuracy      : %.2f %%\n", cumulativeAccuracy);
+                fprintf("  Recent Accuracy (%d)     : %.2f %%\n", ...
+                    windowSize, recentAccuracy);
+                fprintf("============================================================\n");
+            
+            end
         end
 
 

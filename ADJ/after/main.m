@@ -55,11 +55,15 @@ totalTransmissionCount = 0;
 
 beamACKCount = zeros(1, numBeams);
 beamNACKCount = zeros(1, numBeams);
+actualTargetACKHistory = false(1, numTimeSlots);
+pseudoTargetACKHistory = false(1, numTimeSlots);
+actualTargetSINRHistory_dB = zeros(1, numTimeSlots);
+estimatedTargetSINRHistory_dB = zeros(1, numTimeSlots);
 
 
 timeSlot = TimeSlot();
 for slotIndex = 1:numTimeSlots
-    [harqResults, sinrResults_dB, actualTargetACK, successRatio] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
+    [harqResults, sinrResults_dB, actualTargetACK, successRatio, pseudoTargetACK, estimatedTargetSINR_dB] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
 
     % 현재 Slot 결과 저장
     slotSuccessRatios(slotIndex) = successRatio;
@@ -80,6 +84,10 @@ for slotIndex = 1:numTimeSlots
 
        
     end
+    actualTargetACKHistory(slotIndex) = actualTargetACK;
+    pseudoTargetACKHistory(slotIndex) = pseudoTargetACK;
+    actualTargetSINRHistory_dB(slotIndex) = sinrResults_dB(targetUTId);
+    estimatedTargetSINRHistory_dB(slotIndex) = estimatedTargetSINR_dB;
 
     totalTransmissionCount = totalTransmissionCount + numel(UTs);
 end
@@ -97,6 +105,7 @@ DebugHelper.printPerBeamHARQSummary(beamACKCount, beamNACKCount);
 % DebugHelper.printQValues(SatelliteNode.Beams(1).Agent, 1);
 % DebugHelper.printBeamPolicySummary();
 % DebugHelper.printCollisionSummary(numChannels);
+DebugHelper.printAPJPseudoHARQEvaluation(actualTargetACKHistory, pseudoTargetACKHistory, actualTargetSINRHistory_dB, estimatedTargetSINRHistory_dB);
 
 %% ==================== Figure ====================
-FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
+% FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
