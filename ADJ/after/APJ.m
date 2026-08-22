@@ -15,7 +15,7 @@ classdef APJ < Node
 
         ObservationManager
         StateManager
-        Agent
+        Predictor
     end
 
     methods
@@ -41,7 +41,7 @@ classdef APJ < Node
 
             obj.ObservationManager = ObservationManager(obj, numChannels);
             obj.StateManager = StateManager(numChannels, phi, observationMode);
-            obj.Agent = APJAgent(obj);
+            obj.Predictor = APJPredector();
 
 
         end

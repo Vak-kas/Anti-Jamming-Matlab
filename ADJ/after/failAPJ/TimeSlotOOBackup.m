@@ -1,10 +1,10 @@
-classdef TimeSlot
+classdef TimeSlotOO
     properties
         ReconnaissanceDuration
         % BeamLearnRate
     end
     methods
-        function obj = TimeSlot()
+        function obj = TimeSlotOO()
             env;
             obj.ReconnaissanceDuration = reconnaissanceDuration;
             % obj.BeamLearnRate = beamLearnRate;
@@ -63,34 +63,67 @@ classdef TimeSlot
                 ServiceChannels(selectedChannel).addPacket(packet);
             end
 
-            %% 4. APJ 동작
-            %% 4.1 APJ의 현재 환경 sensing
+            %% 4. UT의  현재 RF 환경 sensing
+            for utIndex = 1:numel(UTs)
+                UTs(utIndex).ObservationManager.observe(ServiceChannels, Satellite);
+            end
+
+     
+
+            %% 5. UT의 HARQ 수행
+            harqResults = cell(1, numel(UTs));
+            sinrResults_dB = zeros(1, numel(UTs));
+            for utIndex = 1:numel(UTs)
+                [packetType, SINR_dB] = UTs(utIndex).performHARQ(ServiceChannels, ControlChannels, Satellite);
+                harqResults{utIndex} = packetType;
+                sinrResults_dB(utIndex) = SINR_dB;
+            end
+
+            %% 6. Beam이 UT feedback 수신 및 reward 저장
+            actualACK = false(1, numel(Satellite.Beams));
+            for beamIndex = 1:numel(Satellite.Beams)
+                beam = Satellite.Beams(beamIndex);
+                actualACK(beamIndex) = beam.receiveFeedback(ControlChannels, Satellite);
+                beam.Agent.setReward(actualACK(beamIndex));
+            end
+
+            %% 7. APJ 동작
+            %% 7.1 APJ의 현재 환경 sensing
             apjState = APJ.StateManager.getState();
             predictionForCurrentSlot = APJ.PredictedChannel;
 
             apjOccupancy = zeros(1, numel(ServiceChannels)); % Target Beam 1은 항상 첫 번째 선택자
-            
+
+            APJ.ObservationManager.observe(ServiceChannels, Satellite); % APJ 위치에서 RF sensing
 
             % Target Beam 실제 사용 채널 관측
             observedChannel = APJ.findObservedChannel(ServiceChannels);
+
             if ~isempty(predictionForCurrentSlot) && ~isempty(observedChannel)
                 DebugHelper.recordAPJPrediction(slotIndex, predictionForCurrentSlot, observedChannel);
             end
-
+            
             APJ.ObservationManager.observe(ServiceChannels, Satellite);
             estimatedTargetSINR_dB = APJ.estimateTargetSINR(ServiceChannels, Satellite);
             pseudoTargetACK = [];
+
+            oracleObservation = UTs(1).ObservationManager.getCurrentObservation();
+            actualTargetHARQ = harqResults{1};
+            actualTargetACK = (actualTargetHARQ == PacketType.ACK);
             
+
             if ~isempty(observedChannel) && ~isempty(estimatedTargetSINR_dB)
                 pseudoHARQ = APJ.generatePseudoHARQ(estimatedTargetSINR_dB);
                 pseudoTargetACK = (pseudoHARQ == PacketType.ACK);
 
 
-                 %% 4.2 Transition 완성 + 학습
+             %% 7.2 Oracle 정보 확보
                 APJ.Agent.observeAction(apjState, apjOccupancy, observedChannel);
-                APJ.Agent.setReward(pseudoTargetACK);
+                APJ.Agent.setReward(actualTargetACK);
+
+
                 % APJ StateManager 업데이트
-                APJ.StateManager.update(APJ.ObservationManager.getCurrentObservation(), observedChannel, pseudoHARQ);
+                APJ.StateManager.update(oracleObservation, observedChannel, actualTargetHARQ);
                 apjNextState = APJ.StateManager.getState();
                 APJ.Agent.setCurrentState(apjNextState);
                 APJ.Agent.setCurrentOccupancy(zeros(1, numel(ServiceChannels)));
@@ -109,7 +142,7 @@ classdef TimeSlot
 
            
 
-            %% 4.3 APJ Jamming
+            %% 7.3 APJ Jamming
             if slotIndex > obj.ReconnaissanceDuration && ~isempty(APJ.PredictedChannel)
                 APJ.JammingChannel = predictionForCurrentSlot;
 
@@ -121,30 +154,9 @@ classdef TimeSlot
 
 
 
-            %% 5. UT의  현재 RF 환경 sensing
-            for utIndex = 1:numel(UTs)
-                UTs(utIndex).ObservationManager.observe(ServiceChannels, Satellite);
-            end
-
-
             
 
-            %% 5. UT의 HARQ 수행
-            harqResults = cell(1, numel(UTs));
-            sinrResults_dB = zeros(1, numel(UTs));
-            for utIndex = 1:numel(UTs)
-                [packetType, SINR_dB] = UTs(utIndex).performHARQ(ServiceChannels, ControlChannels, Satellite);
-                harqResults{utIndex} = packetType;
-                sinrResults_dB(utIndex) = SINR_dB;
-            end
 
-            %% 6. Beam이 UT feedback 수신 및 reward 저장
-            actualACK = false(1, numel(Satellite.Beams));
-            for beamIndex = 1:numel(Satellite.Beams)
-                beam = Satellite.Beams(beamIndex);
-                actualACK(beamIndex) = beam.receiveFeedback(ControlChannels, Satellite);
-                beam.Agent.setReward(actualACK(beamIndex));
-            end
 
             %% 결과 반환
             actualTargetACK = (harqResults{1} == PacketType.ACK);

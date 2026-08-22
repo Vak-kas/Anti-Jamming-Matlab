@@ -1,5 +1,5 @@
 %% ==================== Simulation Parameters ====================
-simulationSeed = 1;
+simulationSeed = 47;
 reconnaissanceDuration = 1000;
 numTimeSlots =  1000;
 observationMode = ObservationMode.O;

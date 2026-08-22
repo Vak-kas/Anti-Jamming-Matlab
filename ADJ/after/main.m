@@ -61,9 +61,19 @@ actualTargetSINRHistory_dB = zeros(1, numTimeSlots);
 estimatedTargetSINRHistory_dB = zeros(1, numTimeSlots);
 
 
-timeSlot = TimeSlot();
+% timeSlot = TimeSlot();
+% timeSlot = TimeSlotOO();
+qPolicyEvaluator = QPolicyShadowingEvaluator();
+timeSlot = TimeSlotOOQCompare(qPolicyEvaluator);
+% timeSlot = TimeSlotNoAPJ();
+
+
+
 for slotIndex = 1:numTimeSlots
-    [harqResults, sinrResults_dB, actualTargetACK, successRatio, pseudoTargetACK, estimatedTargetSINR_dB] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
+    % [harqResults, sinrResults_dB, actualTargetACK, successRatio,
+    % pseudoTargetACK, estimatedTargetSINR_dB] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
+    [harqResults, sinrResults_dB, actualTargetACK, successRatio] = timeSlot.run(slotIndex, UTs, SatelliteNode, APJNode, ServiceChannels, ControlChannels);
+
 
     % 현재 Slot 결과 저장
     slotSuccessRatios(slotIndex) = successRatio;
@@ -84,12 +94,12 @@ for slotIndex = 1:numTimeSlots
 
        
     end
-    actualTargetACKHistory(slotIndex) = actualTargetACK;
-    pseudoTargetACKHistory(slotIndex) = pseudoTargetACK;
-    actualTargetSINRHistory_dB(slotIndex) = sinrResults_dB(targetUTId);
-    estimatedTargetSINRHistory_dB(slotIndex) = estimatedTargetSINR_dB;
-
-    totalTransmissionCount = totalTransmissionCount + numel(UTs);
+    % actualTargetACKHistory(slotIndex) = actualTargetACK;
+    % pseudoTargetACKHistory(slotIndex) = pseudoTargetACK;
+    % actualTargetSINRHistory_dB(slotIndex) = sinrResults_dB(targetUTId);
+    % estimatedTargetSINRHistory_dB(slotIndex) = estimatedTargetSINR_dB;
+    % 
+    % totalTransmissionCount = totalTransmissionCount + numel(UTs);
 end
 
 
@@ -99,13 +109,26 @@ end
 % DebugHelper.printAPJInfo(APJNode, UTs, SatelliteNode);
 % DebugHelper.printBeamUTAssociation(Beams, UTs);
 
-DebugHelper.printSimulationSummary(numTimeSlots, numel(UTs), totalACKCount, totalTransmissionCount, ...
-    slotSuccessRatios, targetACKResults, targetSINRResults_dB);
-DebugHelper.printPerBeamHARQSummary(beamACKCount, beamNACKCount);
+% DebugHelper.printSimulationSummary(numTimeSlots, numel(UTs), totalACKCount, totalTransmissionCount, ...
+%     slotSuccessRatios, targetACKResults, targetSINRResults_dB);
+% DebugHelper.printPerBeamHARQSummary(beamACKCount, beamNACKCount);
 % DebugHelper.printQValues(SatelliteNode.Beams(1).Agent, 1);
 % DebugHelper.printBeamPolicySummary();
 % DebugHelper.printCollisionSummary(numChannels);
-DebugHelper.printAPJPseudoHARQEvaluation(actualTargetACKHistory, pseudoTargetACKHistory, actualTargetSINRHistory_dB, estimatedTargetSINRHistory_dB);
+% DebugHelper.printAPJPseudoHARQEvaluation(actualTargetACKHistory, pseudoTargetACKHistory, actualTargetSINRHistory_dB, estimatedTargetSINRHistory_dB);
+DebugHelper.printAPJPredictionSummary(numel(ServiceChannels));
+% DebugHelper.printBeamAPJQAgreementSummary();
+
+qPolicyEvaluator.printSummary();
+qPolicyEvaluator.printMarginAnalysisSummary();
+
+
 
 %% ==================== Figure ====================
 % FigureHelper.plotSystemDeployment(SatelliteNode, Beams, UTs, APJNode, maxBeamFootprintDiameter);
+% FigureHelper.plotBeamAPJQMAE();
+% FigureHelper.plotBeamAPJCosineSimilarity();
+% FigureHelper.plotBeamAPJQCorrelation();
+
+
+qPolicyEvaluator.plotAll();

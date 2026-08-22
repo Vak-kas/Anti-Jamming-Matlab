@@ -2279,50 +2279,1279 @@ classdef DebugHelper
             fprintf("============================================================\n");
         end
 
+        %% ============================================================
+        % APJ Prediction 기록
+        % ============================================================
         function recordAPJPrediction(slotIndex, predictedChannel, actualChannel)
 
-            persistent predictionHistory
-        
-            if isempty(predictionHistory)
-                predictionHistory = [];
-            end
-        
-            isCorrect = (predictedChannel == actualChannel);
-        
-            predictionHistory(end + 1) = double(isCorrect);
-        
-            cumulativeAccuracy = mean(predictionHistory) * 100;
-        
-            windowSize = min(100, numel(predictionHistory));
-            recentAccuracy = ...
-                mean(predictionHistory(end-windowSize+1:end)) * 100;
+            newData.slot = slotIndex;
+            newData.predicted = predictedChannel;
+            newData.actual = actualChannel;
 
-            if mod(slotIndex, 100) == 0
-        
-                fprintf("\n");
-                fprintf("============================================================\n");
-                fprintf("APJ Channel Prediction Evaluation\n");
-                fprintf("============================================================\n");
-                fprintf("  Slot                     : %d\n", slotIndex);
-                fprintf("  Predicted Channel        : %d\n", predictedChannel);
-                fprintf("  Actual Channel           : %d\n", actualChannel);
-            
-                if isCorrect
-                    fprintf("  Result                   : HIT\n");
-                else
-                    fprintf("  Result                   : MISS\n");
-                end
-            
-                fprintf("  Cumulative Accuracy      : %.2f %%\n", cumulativeAccuracy);
-                fprintf("  Recent Accuracy (%d)     : %.2f %%\n", ...
-                    windowSize, recentAccuracy);
-                fprintf("============================================================\n");
-            
+            data = DebugHelper.APJPredictionStorage('add', newData);
+
+            totalCount = numel(data.actual);
+
+            isCorrect = ...
+                (predictedChannel == actualChannel);
+
+            cumulativeAccuracy = ...
+                mean(data.predicted == data.actual);
+
+            recentWindow = min(100, totalCount);
+
+            recentPredicted = ...
+                data.predicted(end-recentWindow+1:end);
+
+            recentActual = ...
+                data.actual(end-recentWindow+1:end);
+
+            recentAccuracy = ...
+                mean(recentPredicted == recentActual);
+
+
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('APJ Channel Prediction Evaluation\n');
+            fprintf('============================================================\n');
+
+            fprintf('  Slot                     : %d\n', slotIndex);
+            fprintf('  Predicted Channel        : %d\n', predictedChannel);
+            fprintf('  Actual Channel           : %d\n', actualChannel);
+
+            if isCorrect
+                fprintf('  Result                   : HIT\n');
+            else
+                fprintf('  Result                   : MISS\n');
             end
+
+            fprintf('  Cumulative Accuracy      : %.2f %%\n', ...
+                cumulativeAccuracy * 100);
+
+            fprintf('  Recent Accuracy (%d)     : %.2f %%\n', ...
+                recentWindow, recentAccuracy * 100);
+
+            fprintf('============================================================\n');
+
+        end
+
+            %% ============================================================
+        % APJ Prediction Storage
+        % ============================================================
+        function data = APJPredictionStorage(action, newData)
+
+            persistent storage
+
+            if isempty(storage)
+                storage.slots = [];
+                storage.predicted = [];
+                storage.actual = [];
+            end
+
+            switch action
+
+                case 'add'
+
+                    storage.slots(end+1) = newData.slot;
+                    storage.predicted(end+1) = newData.predicted;
+                    storage.actual(end+1) = newData.actual;
+
+                case 'get'
+                    % 아무 작업 없음
+
+                case 'reset'
+
+                    storage.slots = [];
+                    storage.predicted = [];
+                    storage.actual = [];
+
+            end
+
+            data = storage;
+
+        end
+                %% ============================================================
+        % APJ Channel Prediction 최종 Summary
+        % ============================================================
+        function printAPJPredictionSummary(numChannels)
+
+            data = DebugHelper.APJPredictionStorage('get', []);
+
+            predicted = data.predicted;
+            actual = data.actual;
+            slots = data.slots;
+
+            totalCount = numel(actual);
+
+            fprintf('\n');
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('APJ CHANNEL PREDICTION SUMMARY\n');
+            fprintf('============================================================\n');
+
+            if totalCount == 0
+                fprintf('  No prediction samples recorded.\n');
+                fprintf('============================================================\n');
+                return;
+            end
+
+
+            %% --------------------------------------------------------
+            % Overall Performance
+            % ---------------------------------------------------------
+            correctCount = sum(predicted == actual);
+            incorrectCount = totalCount - correctCount;
+
+            accuracy = correctCount / totalCount;
+
+            randomBaseline = 1 / numChannels;
+
+            fprintf('  Number of Channels       : %d\n', numChannels);
+            fprintf('  Prediction Samples       : %d\n', totalCount);
+            fprintf('  First Evaluated Slot     : %d\n', slots(1));
+            fprintf('  Last Evaluated Slot      : %d\n', slots(end));
+
+            fprintf('\n');
+            fprintf('  [Overall Prediction Performance]\n');
+
+            fprintf('    Correct Predictions    : %d\n', correctCount);
+            fprintf('    Wrong Predictions      : %d\n', incorrectCount);
+
+            fprintf('    Accuracy               : %6.2f %%\n', ...
+                accuracy * 100);
+
+            fprintf('    Random Baseline        : %6.2f %%\n', ...
+                randomBaseline * 100);
+
+            fprintf('    Improvement over Random: %6.2f x\n', ...
+                accuracy / randomBaseline);
+
+
+            %% --------------------------------------------------------
+            % Recent Performance
+            % ---------------------------------------------------------
+            recentWindow = min(100, totalCount);
+
+            recentPredicted = ...
+                predicted(end-recentWindow+1:end);
+
+            recentActual = ...
+                actual(end-recentWindow+1:end);
+
+            recentAccuracy = ...
+                mean(recentPredicted == recentActual);
+
+            fprintf('\n');
+            fprintf('  [Recent Performance]\n');
+
+            fprintf('    Window Size            : %d\n', ...
+                recentWindow);
+
+            fprintf('    Accuracy               : %6.2f %%\n', ...
+                recentAccuracy * 100);
+
+
+            %% --------------------------------------------------------
+            % Per-Channel Performance
+            % ---------------------------------------------------------
+            fprintf('\n');
+            fprintf('  [Per-Channel Prediction Performance]\n');
+
+            for ch = 1:numChannels
+
+                actualMask = (actual == ch);
+
+                actualCount = sum(actualMask);
+
+                predictedCount = ...
+                    sum(predicted == ch);
+
+                correctChannelCount = ...
+                    sum((predicted == ch) & (actual == ch));
+
+                if actualCount > 0
+                    channelRecall = ...
+                        correctChannelCount / actualCount;
+                else
+                    channelRecall = NaN;
+                end
+
+                if isnan(channelRecall)
+
+                    fprintf(['    CH %2d | Actual: %4d | Predicted: %4d | ' ...
+                        'Correct: %4d | Recall:   N/A\n'], ...
+                        ch, ...
+                        actualCount, ...
+                        predictedCount, ...
+                        correctChannelCount);
+
+                else
+
+                    fprintf(['    CH %2d | Actual: %4d | Predicted: %4d | ' ...
+                        'Correct: %4d | Recall: %6.2f %%\n'], ...
+                        ch, ...
+                        actualCount, ...
+                        predictedCount, ...
+                        correctChannelCount, ...
+                        channelRecall * 100);
+
+                end
+
+            end
+
+
+            %% --------------------------------------------------------
+            % Confusion Matrix
+            % Row    = Actual
+            % Column = Predicted
+            % ---------------------------------------------------------
+            confusionMatrix = zeros(numChannels, numChannels);
+
+            for i = 1:totalCount
+
+                actualCh = actual(i);
+                predictedCh = predicted(i);
+
+                confusionMatrix(actualCh, predictedCh) = ...
+                    confusionMatrix(actualCh, predictedCh) + 1;
+
+            end
+
+
+            fprintf('\n');
+            fprintf('  [Channel Confusion Matrix]\n');
+            fprintf('    Row = Actual, Column = Predicted\n\n');
+
+            fprintf('          ');
+
+            for ch = 1:numChannels
+                fprintf('P%-5d', ch);
+            end
+
+            fprintf('\n');
+
+            for actualCh = 1:numChannels
+
+                fprintf('    A%-3d  ', actualCh);
+
+                for predictedCh = 1:numChannels
+
+                    fprintf('%-6d', ...
+                        confusionMatrix(actualCh, predictedCh));
+
+                end
+
+                fprintf('\n');
+
+            end
+
+
+            %% --------------------------------------------------------
+            % Best / Worst Channel Recall
+            % ---------------------------------------------------------
+            channelRecalls = nan(1, numChannels);
+
+            for ch = 1:numChannels
+
+                actualCount = sum(actual == ch);
+
+                if actualCount > 0
+
+                    correctChannelCount = ...
+                        sum((actual == ch) & ...
+                            (predicted == ch));
+
+                    channelRecalls(ch) = ...
+                        correctChannelCount / actualCount;
+
+                end
+
+            end
+
+            validChannels = find(~isnan(channelRecalls));
+
+            if ~isempty(validChannels)
+
+                [bestRecall, bestIdx] = ...
+                    max(channelRecalls(validChannels));
+
+                [worstRecall, worstIdx] = ...
+                    min(channelRecalls(validChannels));
+
+                bestChannel = ...
+                    validChannels(bestIdx);
+
+                worstChannel = ...
+                    validChannels(worstIdx);
+
+                fprintf('\n');
+                fprintf('  [Channel Statistics]\n');
+
+                fprintf('    Best Predicted Channel : CH %d (%.2f %%)\n', ...
+                    bestChannel, ...
+                    bestRecall * 100);
+
+                fprintf('    Worst Predicted Channel: CH %d (%.2f %%)\n', ...
+                    worstChannel, ...
+                    worstRecall * 100);
+
+            end
+
+
+            fprintf('============================================================\n');
+
+        end
+
+        function recordBeamSelfPrediction( ...
+            slotIndex, ...
+            predictedChannel, ...
+            actualChannel)
+    
+        persistent slots
+        persistent predictedHistory
+        persistent actualHistory
+    
+        if isempty(slots)
+            slots = [];
+            predictedHistory = [];
+            actualHistory = [];
+        end
+    
+    
+        slots(end + 1) = ...
+            slotIndex;
+    
+        predictedHistory(end + 1) = ...
+            predictedChannel;
+    
+        actualHistory(end + 1) = ...
+            actualChannel;
+    
+    
+        %% ============================================================
+        % Accuracy
+        %% ============================================================
+    
+        correctHistory = ...
+            (predictedHistory == actualHistory);
+    
+        totalCount = ...
+            numel(correctHistory);
+    
+        correctCount = ...
+            sum(correctHistory);
+    
+        cumulativeAccuracy = ...
+            mean(correctHistory);
+    
+    
+        %% ============================================================
+        % Recent 100
+        %% ============================================================
+    
+        recentWindow = ...
+            min(100, totalCount);
+    
+        recentAccuracy = ...
+            mean( ...
+                correctHistory( ...
+                    end-recentWindow+1:end ...
+                ) ...
+            );
+    
+    
+        %% ============================================================
+        % Current Result
+        %% ============================================================
+    
+        isCorrect = ...
+            (predictedChannel == actualChannel);
+    
+    
+        fprintf('\n');
+        fprintf('============================================================\n');
+        fprintf('Beam1 Self Next-Channel Prediction Evaluation\n');
+        fprintf('============================================================\n');
+    
+        fprintf('  Slot                     : %d\n', ...
+            slotIndex);
+    
+        fprintf('  Predicted Channel        : %d\n', ...
+            predictedChannel);
+    
+        fprintf('  Actual Selected Channel  : %d\n', ...
+            actualChannel);
+    
+    
+        if isCorrect
+    
+            fprintf('  Result                   : HIT\n');
+    
+        else
+    
+            fprintf('  Result                   : MISS\n');
+    
+        end
+    
+    
+        fprintf('\n');
+        fprintf('  [Prediction Performance]\n');
+    
+        fprintf('    Total Predictions      : %d\n', ...
+            totalCount);
+    
+        fprintf('    Correct Predictions    : %d\n', ...
+            correctCount);
+    
+        fprintf('    Cumulative Accuracy    : %.2f %%\n', ...
+            cumulativeAccuracy * 100);
+    
+        fprintf('    Recent Accuracy (%3d) : %.2f %%\n', ...
+            recentWindow, ...
+            recentAccuracy * 100);
+    
+        fprintf('============================================================\n');
+    
+        end
+
+        function printBeamSelfPredictionQValues( ...
+            slotIndex, ...
+            predictedChannel, ...
+            qValues)
+    
+        fprintf('\n');
+        fprintf('============================================================\n');
+        fprintf('Beam1 Self Next-Channel Prediction\n');
+        fprintf('============================================================\n');
+    
+        fprintf('  Current Slot             : %d\n', ...
+            slotIndex);
+    
+        fprintf('  Prediction Target        : Slot %d\n', ...
+            slotIndex + 1);
+    
+        fprintf('  Predicted Channel        : %d\n', ...
+            predictedChannel);
+    
+    
+        fprintf('\n');
+        fprintf('  [Q-Values]\n');
+    
+    
+        for channelIndex = 1:numel(qValues)
+    
+            fprintf('    CH %2d : %10.6f', ...
+                channelIndex, ...
+                qValues(channelIndex));
+    
+    
+            if channelIndex == predictedChannel
+    
+                fprintf('  <-- Predicted');
+    
+            end
+    
+    
+            fprintf('\n');
+    
+        end
+    
+    
+        fprintf('============================================================\n');
+    
+        end
+
+        function compareOracleTransitions( ...
+            slotIndex, ...
+            beamState, ...
+            beamAction, ...
+            beamReward, ...
+            beamNextState, ...
+            apjState, ...
+            apjAction, ...
+            apjReward, ...
+            apjNextState)
+    
+        %% ============================================================
+        % State 차이
+        %% ============================================================
+    
+        stateDifference = ...
+            double(beamState(:)) - double(apjState(:));
+    
+        stateMAE = ...
+            mean(abs(stateDifference));
+    
+        stateRMSE = ...
+            sqrt(mean(stateDifference.^2));
+    
+        stateMaxError = ...
+            max(abs(stateDifference));
+    
+        stateExactlyEqual = ...
+            isequaln(beamState, apjState);
+    
+    
+        %% ============================================================
+        % Action
+        %% ============================================================
+    
+        actionEqual = ...
+            isequal(beamAction, apjAction);
+    
+    
+        %% ============================================================
+        % Reward
+        %% ============================================================
+    
+        rewardEqual = ...
+            isequal(beamReward, apjReward);
+    
+    
+        %% ============================================================
+        % Next State
+        %% ============================================================
+    
+        nextStateDifference = ...
+            double(beamNextState(:)) - double(apjNextState(:));
+    
+        nextStateMAE = ...
+            mean(abs(nextStateDifference));
+    
+        nextStateRMSE = ...
+            sqrt(mean(nextStateDifference.^2));
+    
+        nextStateMaxError = ...
+            max(abs(nextStateDifference));
+    
+        nextStateExactlyEqual = ...
+            isequaln(beamNextState, apjNextState);
+    
+    
+        %% ============================================================
+        % Transition 전체 일치 여부
+        %% ============================================================
+    
+        transitionEqual = ...
+            stateExactlyEqual && ...
+            actionEqual && ...
+            rewardEqual && ...
+            nextStateExactlyEqual;
+    
+    
+        %% ============================================================
+        % 출력
+        %% ============================================================
+    
+        fprintf('\n');
+        fprintf('============================================================\n');
+        fprintf('FULL ORACLE TRANSITION COMPARISON\n');
+        fprintf('============================================================\n');
+    
+        fprintf('  Slot                     : %d\n', slotIndex);
+    
+    
+        fprintf('\n');
+        fprintf('  [S_t Comparison]\n');
+    
+        fprintf('    Exact Match            : %s\n', ...
+            DebugHelper.boolToString(stateExactlyEqual));
+    
+        fprintf('    MAE                    : %.10f\n', ...
+            stateMAE);
+    
+        fprintf('    RMSE                   : %.10f\n', ...
+            stateRMSE);
+    
+        fprintf('    Maximum Error          : %.10f\n', ...
+            stateMaxError);
+    
+    
+        fprintf('\n');
+        fprintf('  [A_t Comparison]\n');
+    
+        fprintf('    Beam1 Action           : %d\n', ...
+            beamAction);
+    
+        fprintf('    APJ Action             : %d\n', ...
+            apjAction);
+    
+        fprintf('    Match                  : %s\n', ...
+            DebugHelper.boolToString(actionEqual));
+    
+    
+        fprintf('\n');
+        fprintf('  [R_t Comparison]\n');
+    
+        fprintf('    Beam1 Reward           : %d\n', ...
+            beamReward);
+    
+        fprintf('    APJ Reward             : %d\n', ...
+            apjReward);
+    
+        fprintf('    Match                  : %s\n', ...
+            DebugHelper.boolToString(rewardEqual));
+    
+    
+        fprintf('\n');
+        fprintf('  [S_t+1 Comparison]\n');
+    
+        fprintf('    Exact Match            : %s\n', ...
+            DebugHelper.boolToString(nextStateExactlyEqual));
+    
+        fprintf('    MAE                    : %.10f\n', ...
+            nextStateMAE);
+    
+        fprintf('    RMSE                   : %.10f\n', ...
+            nextStateRMSE);
+    
+        fprintf('    Maximum Error          : %.10f\n', ...
+            nextStateMaxError);
+    
+    
+        fprintf('\n');
+        fprintf('  [Transition Result]\n');
+    
+        fprintf('    Full Transition Match  : %s\n', ...
+            DebugHelper.boolToString(transitionEqual));
+    
+        fprintf('============================================================\n');
+    
         end
 
 
+        function compareBeamAPJQValues( ...
+            slotIndex, ...
+            comparisonStage, ...
+            beamQ, ...
+            apjQ)
+    
+        %% ============================================================
+        % Vector 정리
+        %% ============================================================
+    
+        beamQ = double(beamQ(:));
+        apjQ  = double(apjQ(:));
+    
+        numActions = numel(beamQ);
+    
+    
+        %% ============================================================
+        % Q Error
+        %% ============================================================
+    
+        qDifference = beamQ - apjQ;
+    
+        qMAE = mean(abs(qDifference));
+    
+        qRMSE = sqrt(mean(qDifference.^2));
+    
+        qMaxError = max(abs(qDifference));
+    
+    
+        %% ============================================================
+        % Cosine Similarity
+        %% ============================================================
+    
+        denominator = norm(beamQ) * norm(apjQ);
+    
+        if denominator > 0
+            cosineSimilarity = dot(beamQ, apjQ) / denominator;
+        else
+            cosineSimilarity = NaN;
+        end
+    
+    
+        %% ============================================================
+        % Pearson Correlation
+        %% ============================================================
+    
+        if std(beamQ) > 0 && std(apjQ) > 0
+    
+            correlationMatrix = corrcoef(beamQ, apjQ);
+    
+            qCorrelation = correlationMatrix(1, 2);
+    
+        else
+            qCorrelation = NaN;
+        end
+    
+    
+        %% ============================================================
+        % Greedy Channel
+        %% ============================================================
+    
+        [beamBestQ, beamGreedy] = max(beamQ);
+    
+        [apjBestQ, apjGreedy] = max(apjQ);
+    
+        greedyMatch = ...
+            (beamGreedy == apjGreedy);
+    
+    
+        %% ============================================================
+        % Beam Top-2 Margin
+        %% ============================================================
+    
+        beamSortedQ = sort(beamQ, 'descend');
+    
+        if numActions >= 2
+            beamQMargin = ...
+                beamSortedQ(1) - beamSortedQ(2);
+        else
+            beamQMargin = NaN;
+        end
+    
+    
+        %% ============================================================
+        % APJ Top-2 Margin
+        %% ============================================================
+    
+        apjSortedQ = sort(apjQ, 'descend');
+    
+        if numActions >= 2
+            apjQMargin = ...
+                apjSortedQ(1) - apjSortedQ(2);
+        else
+            apjQMargin = NaN;
+        end
+    
+    
+        %% ============================================================
+        % ★ POST APJ TRAIN 결과만 누적 기록
+        %
+        % 실제 APJ prediction에 사용되는 network가
+        % train() 이후 network이므로 POST 기준으로 분석
+        %% ============================================================
+    
+        if strcmpi(char(comparisonStage), 'POST_APJ_TRAIN')
+    
+            DebugHelper.recordBeamAPJQAgreement( ...
+                slotIndex, ...
+                beamGreedy, ...
+                apjGreedy, ...
+                qMAE, ...
+                cosineSimilarity, ...
+                qCorrelation, ...
+                beamQMargin, ...
+                apjQMargin ...
+            );
+    
+        end
+    
+    
+        %% ============================================================
+        % 출력
+        %% ============================================================
+    
+        fprintf('\n');
+        fprintf('============================================================\n');
+        fprintf('BEAM1 vs APJ Q-VECTOR COMPARISON\n');
+        fprintf('============================================================\n');
+    
+        fprintf('  Slot                     : %d\n', ...
+            slotIndex);
+    
+        fprintf('  Stage                    : %s\n', ...
+            char(comparisonStage));
+    
+    
+        fprintf('\n');
+        fprintf('  [Policy Decision]\n');
+    
+        fprintf('    Beam1 Greedy Channel   : %d\n', ...
+            beamGreedy);
+    
+        fprintf('    APJ Greedy Channel     : %d\n', ...
+            apjGreedy);
+    
+        fprintf('    Greedy Match           : %s\n', ...
+            DebugHelper.boolToString(greedyMatch));
+    
+    
+        fprintf('\n');
+        fprintf('  [Q-Vector Similarity]\n');
+    
+        fprintf('    MAE                    : %.6f\n', ...
+            qMAE);
+    
+        fprintf('    RMSE                   : %.6f\n', ...
+            qRMSE);
+    
+        fprintf('    Maximum Error          : %.6f\n', ...
+            qMaxError);
+    
+        fprintf('    Cosine Similarity      : %.6f\n', ...
+            cosineSimilarity);
+    
+        fprintf('    Pearson Correlation    : %.6f\n', ...
+            qCorrelation);
+    
+    
+        fprintf('\n');
+        fprintf('  [Decision Margin]\n');
+    
+        fprintf('    Beam1 Best Q           : %.6f\n', ...
+            beamBestQ);
+    
+        fprintf('    Beam1 Top-2 Margin     : %.6f\n', ...
+            beamQMargin);
+    
+        fprintf('    APJ Best Q             : %.6f\n', ...
+            apjBestQ);
+    
+        fprintf('    APJ Top-2 Margin       : %.6f\n', ...
+            apjQMargin);
+    
+    
+        fprintf('\n');
+        fprintf('  [Per-Channel Q-Values]\n');
+    
+        fprintf('           Beam1 Q       APJ Q        Difference\n');
+    
+    
+        for channelIndex = 1:numActions
+    
+            fprintf( ...
+                '    CH %2d | %10.6f | %10.6f | %+10.6f', ...
+                channelIndex, ...
+                beamQ(channelIndex), ...
+                apjQ(channelIndex), ...
+                qDifference(channelIndex) ...
+            );
+    
+            if channelIndex == beamGreedy && ...
+               channelIndex == apjGreedy
+    
+                fprintf('  <-- BOTH GREEDY');
+    
+            elseif channelIndex == beamGreedy
+    
+                fprintf('  <-- BEAM GREEDY');
+    
+            elseif channelIndex == apjGreedy
+    
+                fprintf('  <-- APJ GREEDY');
+    
+            end
+    
+            fprintf('\n');
+    
+        end
+    
+        fprintf('============================================================\n');
+    
+    end
         
 
+        function data = beamAPJQAgreementData(action, newData)
+    
+            persistent storedData
+        
+        
+            %% ============================================================
+            % Initialize
+            %% ============================================================
+        
+            if isempty(storedData)
+        
+                storedData.Slot = [];
+        
+                storedData.BeamGreedy = [];
+                storedData.APJGreedy = [];
+        
+                storedData.QMAE = [];
+                storedData.Cosine = [];
+                storedData.Correlation = [];
+        
+                storedData.BeamMargin = [];
+                storedData.APJMargin = [];
+        
+            end
+        
+        
+            %% ============================================================
+            % Action
+            %% ============================================================
+        
+            switch lower(action)
+        
+                case 'get'
+        
+                    data = storedData;
+        
+        
+                case 'set'
+        
+                    storedData = newData;
+        
+                    data = storedData;
+        
+        
+                case 'reset'
+        
+                    storedData.Slot = [];
+        
+                    storedData.BeamGreedy = [];
+                    storedData.APJGreedy = [];
+        
+                    storedData.QMAE = [];
+                    storedData.Cosine = [];
+                    storedData.Correlation = [];
+        
+                    storedData.BeamMargin = [];
+                    storedData.APJMargin = [];
+        
+                    data = storedData;
+        
+        
+                otherwise
+        
+                    error( ...
+                        'Unknown beamAPJQAgreementData action: %s', ...
+                        action ...
+                    );
+        
+            end
+        
+    end
+
+
+        function recordBeamAPJQAgreement( ...
+            slotIndex, ...
+            beamGreedy, ...
+            apjGreedy, ...
+            qMAE, ...
+            cosineSimilarity, ...
+            qCorrelation, ...
+            beamQMargin, ...
+            apjQMargin)
+    
+    
+        %% ============================================================
+        % 기존 기록 가져오기
+        %% ============================================================
+    
+        data = ...
+            DebugHelper.beamAPJQAgreementData( ...
+                'get', ...
+                [] ...
+            );
+    
+    
+        %% ============================================================
+        % 새 값 저장
+        %% ============================================================
+    
+        data.Slot(end + 1) = ...
+            slotIndex;
+    
+        data.BeamGreedy(end + 1) = ...
+            beamGreedy;
+    
+        data.APJGreedy(end + 1) = ...
+            apjGreedy;
+    
+        data.QMAE(end + 1) = ...
+            qMAE;
+    
+        data.Cosine(end + 1) = ...
+            cosineSimilarity;
+    
+        data.Correlation(end + 1) = ...
+            qCorrelation;
+    
+        data.BeamMargin(end + 1) = ...
+            beamQMargin;
+    
+        data.APJMargin(end + 1) = ...
+            apjQMargin;
+    
+    
+        DebugHelper.beamAPJQAgreementData( ...
+            'set', ...
+            data ...
+        );
+    
+    
+        %% ============================================================
+        % Agreement
+        %% ============================================================
+    
+        matchHistory = ...
+            (data.BeamGreedy == data.APJGreedy);
+    
+    
+        totalSamples = ...
+            numel(matchHistory);
+    
+    
+        overallAgreement = ...
+            mean(matchHistory);
+    
+    
+        recentWindow = ...
+            min(100, totalSamples);
+    
+    
+        recentAgreement = ...
+            mean( ...
+                matchHistory( ...
+                    end-recentWindow+1:end ...
+                ) ...
+            );
+    
+    
+        %% ============================================================
+        % 출력
+        %% ============================================================
+    
+        fprintf('\n');
+        fprintf('============================================================\n');
+        fprintf('BEAM1 - APJ GREEDY POLICY AGREEMENT\n');
+        fprintf('============================================================\n');
+    
+        fprintf('  Slot                     : %d\n', ...
+            slotIndex);
+    
+        fprintf('  Beam1 Greedy             : CH %d\n', ...
+            beamGreedy);
+    
+        fprintf('  APJ Greedy               : CH %d\n', ...
+            apjGreedy);
+    
+    
+        if beamGreedy == apjGreedy
+    
+            fprintf('  Result                   : MATCH\n');
+    
+        else
+    
+            fprintf('  Result                   : MISMATCH\n');
+    
+        end
+    
+    
+        fprintf('\n');
+        fprintf('  [Cumulative]\n');
+    
+        fprintf('    Samples                : %d\n', ...
+            totalSamples);
+    
+        fprintf('    Greedy Agreement       : %.2f %%\n', ...
+            overallAgreement * 100);
+    
+        fprintf('    Recent Agreement (%3d): %.2f %%\n', ...
+            recentWindow, ...
+            recentAgreement * 100);
+    
+        fprintf('============================================================\n');
+    
+    end
+        function printBeamAPJQAgreementSummary()
+
+            data = ...
+                DebugHelper.beamAPJQAgreementData( ...
+                    'get', ...
+                    [] ...
+                );
+        
+        
+            %% ============================================================
+            % 데이터 확인
+            %% ============================================================
+        
+            if isempty(data.Slot)
+        
+                fprintf('\n');
+                fprintf('============================================================\n');
+                fprintf('BEAM1 - APJ Q-POLICY SUMMARY\n');
+                fprintf('============================================================\n');
+                fprintf('  No Q-comparison samples recorded.\n');
+                fprintf('============================================================\n');
+        
+                return;
+        
+            end
+        
+        
+            %% ============================================================
+            % Match
+            %% ============================================================
+        
+            matchHistory = ...
+                (data.BeamGreedy == data.APJGreedy);
+        
+        
+            totalSamples = ...
+                numel(matchHistory);
+        
+        
+            correctCount = ...
+                sum(matchHistory);
+        
+        
+            mismatchCount = ...
+                totalSamples - correctCount;
+        
+        
+            overallAgreement = ...
+                mean(matchHistory);
+        
+        
+            %% ============================================================
+            % Recent 100
+            %% ============================================================
+        
+            recentWindow = ...
+                min(100, totalSamples);
+        
+        
+            recentIndices = ...
+                totalSamples-recentWindow+1 : totalSamples;
+        
+        
+            recentAgreement = ...
+                mean(matchHistory(recentIndices));
+        
+        
+            %% ============================================================
+            % Similarity
+            %% ============================================================
+        
+            averageQMAE = ...
+                mean(data.QMAE, 'omitnan');
+        
+        
+            averageCosine = ...
+                mean(data.Cosine, 'omitnan');
+        
+        
+            averageCorrelation = ...
+                mean(data.Correlation, 'omitnan');
+        
+        
+            averageBeamMargin = ...
+                mean(data.BeamMargin, 'omitnan');
+        
+        
+            averageAPJMargin = ...
+                mean(data.APJMargin, 'omitnan');
+        
+        
+            %% ============================================================
+            % Recent Similarity
+            %% ============================================================
+        
+            recentQMAE = ...
+                mean( ...
+                    data.QMAE(recentIndices), ...
+                    'omitnan' ...
+                );
+        
+        
+            recentCosine = ...
+                mean( ...
+                    data.Cosine(recentIndices), ...
+                    'omitnan' ...
+                );
+        
+        
+            recentCorrelation = ...
+                mean( ...
+                    data.Correlation(recentIndices), ...
+                    'omitnan' ...
+                );
+        
+        
+            %% ============================================================
+            % 출력
+            %% ============================================================
+        
+            fprintf('\n');
+            fprintf('\n');
+            fprintf('============================================================\n');
+            fprintf('BEAM1 - APJ Q-POLICY SHADOWING SUMMARY\n');
+            fprintf('============================================================\n');
+        
+            fprintf('  Comparison Stage         : POST_APJ_TRAIN\n');
+        
+            fprintf('  Number of Samples        : %d\n', ...
+                totalSamples);
+        
+            fprintf('  First Slot               : %d\n', ...
+                data.Slot(1));
+        
+            fprintf('  Last Slot                : %d\n', ...
+                data.Slot(end));
+        
+        
+            fprintf('\n');
+            fprintf('  [Greedy Policy Agreement]\n');
+        
+            fprintf('    Matched                : %d\n', ...
+                correctCount);
+        
+            fprintf('    Mismatched             : %d\n', ...
+                mismatchCount);
+        
+            fprintf('    Overall Agreement      : %.2f %%\n', ...
+                overallAgreement * 100);
+        
+            fprintf('    Recent Agreement (%3d): %.2f %%\n', ...
+                recentWindow, ...
+                recentAgreement * 100);
+        
+        
+            fprintf('\n');
+            fprintf('  [Q-Vector Similarity - Overall]\n');
+        
+            fprintf('    Average Q-MAE          : %.6f\n', ...
+                averageQMAE);
+        
+            fprintf('    Average Cosine         : %.6f\n', ...
+                averageCosine);
+        
+            fprintf('    Average Pearson Corr.  : %.6f\n', ...
+                averageCorrelation);
+        
+        
+            fprintf('\n');
+            fprintf('  [Q-Vector Similarity - Recent %d]\n', ...
+                recentWindow);
+        
+            fprintf('    Average Q-MAE          : %.6f\n', ...
+                recentQMAE);
+        
+            fprintf('    Average Cosine         : %.6f\n', ...
+                recentCosine);
+        
+            fprintf('    Average Pearson Corr.  : %.6f\n', ...
+                recentCorrelation);
+        
+        
+            fprintf('\n');
+            fprintf('  [Decision Margin]\n');
+        
+            fprintf('    Avg Beam1 Top-2 Margin : %.6f\n', ...
+                averageBeamMargin);
+        
+            fprintf('    Avg APJ Top-2 Margin   : %.6f\n', ...
+                averageAPJMargin);
+        
+        
+            fprintf('\n');
+            fprintf('  Interpretation:\n');
+        
+            fprintf('    Greedy agreement measures exact policy-action agreement.\n');
+        
+            fprintf('    Q-vector similarity measures value-function similarity.\n');
+        
+            fprintf('============================================================\n');
+        
+        end
+    
+    
+    
     end
 end
