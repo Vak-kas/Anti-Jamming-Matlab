@@ -11,11 +11,13 @@ classdef APJ < Node
         JammingChannel
 
         SINRThreshold_dB
+        PredictedQValues
 
 
         ObservationManager
         StateManager
         Predictor
+        % Agent
     end
 
     methods
@@ -28,6 +30,7 @@ classdef APJ < Node
             obj.TargetUTId = targetUTId;
 
             obj.TxPower_dBm = apjTxPower_dBm;
+            obj.TxGain_dBi = apjTxGain_dBi;
             obj.RxGain_dBi = apjRxGain_dBi;
 
             obj.NoiseTemperature = noiseTemperature;
@@ -41,7 +44,8 @@ classdef APJ < Node
 
             obj.ObservationManager = ObservationManager(obj, numChannels);
             obj.StateManager = StateManager(numChannels, phi, observationMode);
-            obj.Predictor = APJPredector();
+            obj.Predictor = APJPredictor(obj);
+            % obj.Agent = APJAgent(obj);
 
 
         end

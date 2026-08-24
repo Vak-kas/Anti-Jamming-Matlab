@@ -61,6 +61,10 @@ classdef ObservationManager < handle
                     if beam.Id == obj.Owner.AssociatedBeamId
                         continue;
                     end
+                elseif obj.Owner.Type == NodeType.APJ
+                    if packet.DestinationId == obj.Owner.TargetUTId
+                        continue;
+                    end 
                 end
 
                 receivedPower_W = obj.calculateReceivedPower_W(beam, Satellite, centerFrequency_Hz);

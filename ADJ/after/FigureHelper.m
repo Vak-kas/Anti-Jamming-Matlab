@@ -706,7 +706,104 @@ classdef FigureHelper
     
         grid on;
     
+        end
+
+        %% ========== APJ Prediction Accuracy 추이 그래프 ==========
+function plotAPJAccuracyTrend(windowSize)
+
+    if nargin < 1
+        windowSize = 100;
     end
+
+    data = DebugHelper.APJPredictionStorage('get', []);
+
+    predicted = data.predicted;
+    actual = data.actual;
+    slots = data.slots;
+
+    if isempty(slots)
+        fprintf('기록된 예측 데이터가 없습니다.\n');
+        return;
+    end
+
+    correctHistory = double(predicted == actual);
+
+    % 누적 정확도 (slot 1부터 현재까지)
+    cumulativeAccuracy = cumsum(correctHistory) ./ (1:numel(correctHistory));
+
+    % 이동평균(rolling) 정확도 — 최근 windowSize 슬롯 기준
+    rollingAccuracy = movmean(correctHistory, [windowSize-1, 0]);
+
+    figure;
+    plot(slots, cumulativeAccuracy * 100, 'LineWidth', 1.2);
+    hold on;
+    plot(slots, rollingAccuracy * 100, 'LineWidth', 1.2);
+    yline(100 / max(actual), '--', 'Random Baseline');
+    hold off;
+
+    xlabel('Time Slot');
+    ylabel('Accuracy (%)');
+    title('APJ Channel Prediction Accuracy over Time');
+    legend('Cumulative Accuracy', sprintf('Rolling Accuracy (window=%d)', windowSize), 'Location', 'southeast');
+    grid on;
+    ylim([0 100]);
+
+end
+
+%% ========== Target UT ACK Rate 추이 그래프 ==========
+function plotTargetUTThroughput(windowSize)
+
+    if nargin < 1
+        windowSize = 100;
+    end
+
+    data = DebugHelper.TargetUTStorage('get', []);
+
+    if isempty(data.slots)
+        fprintf('기록된 Target UT 데이터가 없습니다.\n');
+        return;
+    end
+
+    slots = data.slots;
+    ackHistory = double(data.isACK);
+
+    rollingACKRate = movmean(ackHistory, [windowSize-1, 0]);
+    cumulativeACKRate = cumsum(ackHistory) ./ (1:numel(ackHistory));
+
+    attackStartIdx = find(data.isAttackPhase, 1);
+
+    figure;
+
+    subplot(2,1,1);
+    plot(slots, cumulativeACKRate * 100, 'LineWidth', 1.2);
+    hold on;
+    plot(slots, rollingACKRate * 100, 'LineWidth', 1.2);
+    if ~isempty(attackStartIdx)
+        xline(slots(attackStartIdx), '--r', 'Attack Start', 'LineWidth', 1.2);
+    end
+    hold off;
+    xlabel('Time Slot');
+    ylabel('ACK Rate (%)');
+    title('Target UT ACK Rate over Time');
+    legend('Cumulative', sprintf('Rolling (window=%d)', windowSize), 'Location', 'southwest');
+    grid on;
+    ylim([0 100]);
+
+    subplot(2,1,2);
+    rollingSINR = movmean(data.SINR_dB, [windowSize-1, 0]);
+    plot(slots, rollingSINR, 'LineWidth', 1.2);
+    hold on;
+    yline(0, ':'); % placeholder, 아래에서 threshold로 교체 권장
+    if ~isempty(attackStartIdx)
+        xline(slots(attackStartIdx), '--r', 'Attack Start', 'LineWidth', 1.2);
+    end
+    hold off;
+    xlabel('Time Slot');
+    ylabel('SINR (dB)');
+    title(sprintf('Target UT SINR over Time (Rolling window=%d)', windowSize));
+    grid on;
+
+end
     
     
     end

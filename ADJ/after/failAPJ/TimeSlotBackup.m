@@ -69,14 +69,15 @@ classdef TimeSlot
             predictionForCurrentSlot = APJ.PredictedChannel;
 
             apjOccupancy = zeros(1, numel(ServiceChannels)); % Target Beam 1은 항상 첫 번째 선택자
-            APJ.ObservationManager.observe(ServiceChannels, Satellite); % APJ 위치에서 RF sensing
+            
 
             % Target Beam 실제 사용 채널 관측
             observedChannel = APJ.findObservedChannel(ServiceChannels);
             if ~isempty(predictionForCurrentSlot) && ~isempty(observedChannel)
                 DebugHelper.recordAPJPrediction(slotIndex, predictionForCurrentSlot, observedChannel);
             end
-            
+
+            APJ.ObservationManager.observe(ServiceChannels, Satellite);
             estimatedTargetSINR_dB = APJ.estimateTargetSINR(ServiceChannels, Satellite);
             pseudoTargetACK = [];
             

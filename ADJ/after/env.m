@@ -1,7 +1,7 @@
 %% ==================== Simulation Parameters ====================
-simulationSeed = 47;
-reconnaissanceDuration = 1000;
-numTimeSlots =  1000;
+simulationSeed = 3;
+reconnaissanceDuration = 3000;
+numTimeSlots =  3000;
 observationMode = ObservationMode.O;
 
 %% ==================== Channel Parameters ====================
@@ -62,6 +62,7 @@ utTxPower_dBm = 23;
 
 noiseTemperature = 290;
 noiseFigure_dB = 7;
+utTxGain_dBi = 0;
 utRxGain_dBi = 0;
 
 sinrThreshold_dB = 12.5; % SINR Threshold
@@ -73,6 +74,7 @@ targetJammerDistance = 10e3; %10km %Target UT - APJ Distance
 apjTxPower_dBm = 37; % APJ 전송 파워
 
 apjRxGain_dBi = 0;
+apjTxGain_dBi = 0;
 apjNoiseFigure_dB = 7;
 apjSINRThreshold_dB = 12.5;
 
@@ -108,7 +110,7 @@ apjBatchSize = 128;
 apjLearnRate = 0.001;
 apjDiscountFactor = 0.8;
 
-apjReplayBufferCapacity = 10000;
+apjReplayBufferCapacity = 500;
 
 % Epsilon-greedy
 apjEpsilon = 0.0;

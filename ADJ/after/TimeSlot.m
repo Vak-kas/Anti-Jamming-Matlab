@@ -1,16 +1,15 @@
 classdef TimeSlot
     properties
         ReconnaissanceDuration
-        % BeamLearnRate
     end
+
     methods
         function obj = TimeSlot()
             env;
             obj.ReconnaissanceDuration = reconnaissanceDuration;
-            % obj.BeamLearnRate = beamLearnRate;
         end
 
-        function [harqResults, sinrResults_dB, actualTargetACK, successRatio, pseudoTargetACK, estimatedTargetSINR_dB] = run(obj, slotIndex, UTs, Satellite, APJ, ServiceChannels, ControlChannels)
+        function run(obj, slotIndex, UTs, Satellite, APJ, ServiceChannels, ControlChannels)
             DebugHelper.printTimeSlot(slotIndex);
 
             %% 1. 채널 초기화
@@ -18,7 +17,6 @@ classdef TimeSlot
 
             %% 2. Satellite beam의 채널 선택 (Action a_t 선택) + Transition 완성 + 학습
             currentSlotOccupancy = zeros(1, numel(ServiceChannels));
-            % mainLearnerIndex = mod(slotIndex-1, numel(Satellite.Beams)) + 1;   % Multi-Timescale: 라운드로빈 순번
 
             for beamIndex = 1:numel(Satellite.Beams)
                 beam = Satellite.Beams(beamIndex);
@@ -43,11 +41,8 @@ classdef TimeSlot
 
                 beam.SelectedChannel = selectedChannel;
                 currentSlotOccupancy(selectedChannel) = currentSlotOccupancy(selectedChannel) + 1;
-
-                if beamIndex == 1
-                    % DebugHelper.recordBeamPolicy(slotIndex, qValues);
-                end
             end
+
 
             %% 3. Satellite가 해당 채널로 DL 전송
             dataPackets = cell(1, numel(Satellite.Beams));
@@ -63,79 +58,133 @@ classdef TimeSlot
                 ServiceChannels(selectedChannel).addPacket(packet);
             end
 
-            %% 4. APJ 동작
-            %% 4.1 APJ의 현재 환경 sensing
-            apjState = APJ.StateManager.getState();
-            predictionForCurrentSlot = APJ.PredictedChannel;
 
-            apjOccupancy = zeros(1, numel(ServiceChannels)); % Target Beam 1은 항상 첫 번째 선택자
-            
+            %% 4. APJ 정찰 / 학습 / 예측
+            apj = APJ;
 
-            % Target Beam 실제 사용 채널 관측
-            observedChannel = APJ.findObservedChannel(ServiceChannels);
-            if ~isempty(predictionForCurrentSlot) && ~isempty(observedChannel)
-                DebugHelper.recordAPJPrediction(slotIndex, predictionForCurrentSlot, observedChannel);
+            % 4-0. 채점 대상: 저번 슬롯에서 "이번 슬롯"을 예측해둔 값
+            previousPredictedChannel = apj.PredictedChannel;
+
+            % 4-1. 이번 슬롯 Target의 실제 채널/SINR/Pseudo HARQ 관측 시도
+            [observedChannel, estimatedSINR_dB, pseudoHARQ] = apj.observeTarget(ServiceChannels, Satellite);
+
+            isEavesdropSuccessful = ~isempty(observedChannel);
+
+            % 4-2. 예측 정확도 채점 (도청 성공 + 채점할 이전 예측이 있을 때만)
+            if isEavesdropSuccessful && ~isempty(previousPredictedChannel)
+                DebugHelper.recordAPJPrediction(slotIndex, previousPredictedChannel, observedChannel, numel(ServiceChannels));
             end
 
-            APJ.ObservationManager.observe(ServiceChannels, Satellite);
-            estimatedTargetSINR_dB = APJ.estimateTargetSINR(ServiceChannels, Satellite);
-            pseudoTargetACK = [];
-            
-            if ~isempty(observedChannel) && ~isempty(estimatedTargetSINR_dB)
-                pseudoHARQ = APJ.generatePseudoHARQ(estimatedTargetSINR_dB);
-                pseudoTargetACK = (pseudoHARQ == PacketType.ACK);
-
-
-                 %% 4.2 Transition 완성 + 학습
-                APJ.Agent.observeAction(apjState, apjOccupancy, observedChannel);
-                APJ.Agent.setReward(pseudoTargetACK);
-                % APJ StateManager 업데이트
-                APJ.StateManager.update(APJ.ObservationManager.getCurrentObservation(), observedChannel, pseudoHARQ);
-                apjNextState = APJ.StateManager.getState();
-                APJ.Agent.setCurrentState(apjNextState);
-                APJ.Agent.setCurrentOccupancy(zeros(1, numel(ServiceChannels)));
-                APJ.Agent.completeTransition();
-    
-                [apjLossValue, apjTrainingInfo] = APJ.Agent.train();
-
-                [predictedChannel, apjQValues] = APJ.Agent.predictAction(apjNextState, zeros(1, numel(ServiceChannels)));
-                APJ.PredictedChannel = predictedChannel;
-                DebugHelper.printAPJTraining(APJ, slotIndex, observedChannel, estimatedTargetSINR_dB, pseudoHARQ, apjLossValue, apjTrainingInfo, apjQValues);
-                % DebugHelper.printAPJPredictionQValues(slotIndex, predictedChannel, apjQValues);
-
+            % 4-3. 직전 슬롯 PendingState의 label 확정 -> 학습쌍 완성
+            if isEavesdropSuccessful
+                apj.Predictor.completeTrainingPair(observedChannel);
             end
 
+            % 4-4. 학습
+            [apjLossValue, apjTrainingInfo] = apj.Predictor.train();
 
-
-           
-
-            %% 4.3 APJ Jamming
-            if slotIndex > obj.ReconnaissanceDuration && ~isempty(APJ.PredictedChannel)
-                APJ.JammingChannel = predictionForCurrentSlot;
-
-
-                % 이후 여기서 Jamming Packet 생성 및
-            
-                % ServiceChannels(APJ.JammingChannel)에 삽입
+            % 4-5. 이번 슬롯 O/A/H를 StateManager에 반영 (도청 성공한 슬롯만)
+            if isEavesdropSuccessful
+                observation = apj.ObservationManager.observe(ServiceChannels, Satellite);
+                apj.StateManager.update(observation, observedChannel, pseudoHARQ);
             end
 
+            currentApjState = apj.StateManager.getState();
 
-
-            %% 5. UT의  현재 RF 환경 sensing
-            for utIndex = 1:numel(UTs)
-                UTs(utIndex).ObservationManager.observe(ServiceChannels, Satellite);
+            % 4-6. 이번 슬롯이 다음 슬롯 label의 PendingState가 됨 (정찰 성공 시에만)
+            if isEavesdropSuccessful
+                apj.Predictor.setPendingState(currentApjState);
             end
 
+            % 4-7. 다음 슬롯 채널 예측 (정찰 기간 포함, 매 슬롯 시도 — 정확도 추적 목적)
+            if apj.StateManager.isReady()
+                [predictedChannel, ~] = apj.Predictor.predictChannel(currentApjState);
+            else
+                predictedChannel = [];
+            end
 
+            apj.PredictedChannel = predictedChannel;
+
+            % 4-8. 공격 기간에만 실제 재밍 채널로 확정 (재밍 주입 로직은 아직 미구현)
+            if slotIndex > obj.ReconnaissanceDuration
+                apj.JammingChannel = predictedChannel;
+            end
+
+            %% 4. APJ 정찰 / 학습 / 예측 (Oracle 버전)
+            % apj = APJ;
+            % targetBeam = Satellite.Beams([Satellite.Beams.AssociatedUTId] == apj.TargetUTId);
+            % 
+            % % 0. 채점 대상: 저번 슬롯에서 만들어둔 예측
+            % previousPredictedChannel = apj.PredictedChannel;
+            % 
+            % % 1. 실제 채널(Oracle이므로 도청/추정 없이 그대로 확보)
+            % actualChannel = targetBeam.SelectedChannel;
+            % 
+            % % 2. 예측 정확도 채점
+            % if ~isempty(previousPredictedChannel)
+            %     DebugHelper.recordAPJPrediction(slotIndex, previousPredictedChannel, actualChannel, numel(ServiceChannels));
+            % end
+            % 
+            % % 3. 학습쌍 완성 (Oracle이므로 항상 성공)
+            % apj.Predictor.completeTrainingPair(actualChannel);
+            % 
+            % % 4. 학습
+            % [apjLossValue, apjTrainingInfo] = apj.Predictor.train();
+            % 
+            % % 5. Oracle state = Target Beam의 실제 StateManager 그대로
+            % oracleState = targetBeam.StateManager.getState();
+            % 
+            % % 6. 다음 슬롯 label의 PendingState로 저장
+            % apj.Predictor.setPendingState(oracleState);
+            % 
+            % % 7. 다음 슬롯 채널 예측
+            % if targetBeam.StateManager.isReady()
+            %     [predictedChannel, ~] = apj.Predictor.predictChannel(oracleState);
+            % else
+            %     predictedChannel = [];
+            % end
+            % 
+            % apj.PredictedChannel = predictedChannel;
+
+
+            %% 4.5. APJ의 공격
+            if slotIndex > obj.ReconnaissanceDuration && ~isempty(apj.PredictedChannel)
             
+                jammingChannel = previousPredictedChannel;
+                % 안전성 검사
+                if ~isscalar(jammingChannel) || jammingChannel < 1 || jammingChannel > numel(ServiceChannels)
+                    error("TimeSlot:InvalidJammingChannel", "Invalid jamming channel at slot %d: %s", slotIndex, mat2str(jammingChannel));
+                end
+                apj.JammingChannel = jammingChannel;
+            
+                % Target UT를 서비스하는 Beam 검색
+            
+                targetBeamIndex = find([Satellite.Beams.AssociatedUTId] == apj.TargetUTId, 1);
+            
+                if isempty(targetBeamIndex)
+                    error("TimeSlot:TargetBeamNotFound", "Target UT %d에 연결된 Beam을 찾을 수 없습니다.", apj.TargetUTId);
+                end
+            
+                targetBeamId = Satellite.Beams(targetBeamIndex).Id;
+            
+                jamPacket = Packet(PacketType.JAMMING, NodeType.APJ, apj.Id, ...
+                    NodeType.UT, apj.TargetUTId, targetBeamId, ChannelType.Service, jammingChannel);
+            
+                ServiceChannels(jammingChannel).addPacket(jamPacket);
+            
+            end
 
             %% 5. UT의 HARQ 수행
             harqResults = cell(1, numel(UTs));
             sinrResults_dB = zeros(1, numel(UTs));
             for utIndex = 1:numel(UTs)
-                [packetType, SINR_dB] = UTs(utIndex).performHARQ(ServiceChannels, ControlChannels, Satellite);
+                [packetType, SINR_dB] = UTs(utIndex).performHARQ(ServiceChannels, ControlChannels, Satellite, APJ);
                 harqResults{utIndex} = packetType;
                 sinrResults_dB(utIndex) = SINR_dB;
+
+                if UTs(utIndex).IsTarget
+                    DebugHelper.recordTargetUTOutcome(slotIndex, packetType, SINR_dB, obj.ReconnaissanceDuration);
+                end
             end
 
             %% 6. Beam이 UT feedback 수신 및 reward 저장
@@ -146,24 +195,8 @@ classdef TimeSlot
                 beam.Agent.setReward(actualACK(beamIndex));
             end
 
-            %% 결과 반환
-            actualTargetACK = (harqResults{1} == PacketType.ACK);
-            %=============================================================
-            % FigureHelper.plotBeam1SuccessRate(slotIndex, actualTargetACK);
-            %=============================================================
-            numACK = 0;
-            for utIndex = 1:numel(UTs)
-                if harqResults{utIndex} == PacketType.ACK
-                    numACK = numACK + 1;
-                end
-            end
-            successRatio = numACK / numel(UTs);
-            %=============================================================
-            % FigureHelper.plotSuccessRate(slotIndex, successRatio, 'All UTs (Aggregate)');
-            %=============================================================
         end
 
-        %% 채널 초기화
         function clearChannels(obj, ServiceChannels, ControlChannels)
             for channelIndex = 1:numel(ServiceChannels)
                 ServiceChannels(channelIndex).clearPacket();
