@@ -103,13 +103,14 @@ classdef (Abstract) Agent < handle
         % ========== 보상 등록 ========== %
         function setReward(obj, outcome)
 
-        % Reward 계산
-        reward = obj.RewardFunction(outcome);
-
             if isempty(obj.RewardFunction)
                 error("Agent:RewardFunctionNotSet", "RewardFunction이 등록되지 않았습니다.");
             end
-            obj.PendingReward = obj.RewardFunction(outcome);
+
+            
+            % Reward 계산
+            reward = obj.RewardFunction(outcome);
+            obj.PendingReward = reward;
             obj.OutcomeHistory(end + 1) = double(outcome);
             obj.RewardHistory(end + 1) = reward;
         end

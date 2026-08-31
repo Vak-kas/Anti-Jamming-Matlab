@@ -9,7 +9,7 @@ classdef TimeSlot
             obj.ReconnaissanceDuration = reconnaissanceDuration;
         end
 
-        function run(obj, slotIndex, UTs, Satellite, APJ, ServiceChannels, ControlChannels)
+        function bcLog = run(obj, slotIndex, UTs, Satellite, APJ, ServiceChannels, ControlChannels, bcLog)
             DebugHelper.printTimeSlot(slotIndex);
 
             %% 1. 채널 초기화
@@ -62,7 +62,7 @@ classdef TimeSlot
             %% 4. APJ 정찰 / 학습 / 예측
             apj = APJ;
 
-            % 4-0. 채점 대상: 저번 슬롯에서 "이번 슬롯"을 예측해둔 값
+            % 4-0. 채점 대상: 저번 슬롯에서 "이번 슬롯"을 예측해둔 값 (Top-2, 1x1 또는 1x2)
             previousPredictedChannel = apj.PredictedChannel;
 
             % 4-1. 이번 슬롯 Target의 실제 채널/SINR/Pseudo HARQ 관측 시도
@@ -70,9 +70,9 @@ classdef TimeSlot
 
             isEavesdropSuccessful = ~isempty(observedChannel);
 
-            % 4-2. 예측 정확도 채점 (도청 성공 + 채점할 이전 예측이 있을 때만)
+            % 4-2. 예측 정확도 채점 (도청 성공 + 채점할 이전 예측이 있을 때만, 진단용 Top-1만 사용)
             if isEavesdropSuccessful && ~isempty(previousPredictedChannel)
-                DebugHelper.recordAPJPrediction(slotIndex, previousPredictedChannel, observedChannel, numel(ServiceChannels));
+                DebugHelper.recordAPJPrediction(slotIndex, previousPredictedChannel(1), observedChannel, numel(ServiceChannels));
             end
 
             % 4-3. 직전 슬롯 PendingState의 label 확정 -> 학습쌍 완성
@@ -96,82 +96,101 @@ classdef TimeSlot
                 apj.Predictor.setPendingState(currentApjState);
             end
 
-            % 4-7. 다음 슬롯 채널 예측 (정찰 기간 포함, 매 슬롯 시도 — 정확도 추적 목적)
+            % 4-7. 다음 슬롯 채널 예측 (Top-2, 정찰 기간 포함, 매 슬롯 시도 — 정확도 추적 목적)
             if apj.StateManager.isReady()
-                [predictedChannel, ~] = apj.Predictor.predictChannel(currentApjState);
+                [predictedChannels, ~] = apj.Predictor.predictChannel(currentApjState, 2);
             else
-                predictedChannel = [];
+                predictedChannels = [];
             end
 
-            apj.PredictedChannel = predictedChannel;
+            apj.PredictedChannel = predictedChannels;   % 1x1 또는 1x2 벡터
 
-            % 4-8. 공격 기간에만 실제 재밍 채널로 확정 (재밍 주입 로직은 아직 미구현)
-            if slotIndex > obj.ReconnaissanceDuration
-                apj.JammingChannel = predictedChannel;
-            end
 
             %% 4. APJ 정찰 / 학습 / 예측 (Oracle 버전)
             % apj = APJ;
             % targetBeam = Satellite.Beams([Satellite.Beams.AssociatedUTId] == apj.TargetUTId);
-            % 
+            %
             % % 0. 채점 대상: 저번 슬롯에서 만들어둔 예측
             % previousPredictedChannel = apj.PredictedChannel;
-            % 
+            %
             % % 1. 실제 채널(Oracle이므로 도청/추정 없이 그대로 확보)
             % actualChannel = targetBeam.SelectedChannel;
-            % 
+            %
             % % 2. 예측 정확도 채점
             % if ~isempty(previousPredictedChannel)
             %     DebugHelper.recordAPJPrediction(slotIndex, previousPredictedChannel, actualChannel, numel(ServiceChannels));
             % end
-            % 
+            %
             % % 3. 학습쌍 완성 (Oracle이므로 항상 성공)
             % apj.Predictor.completeTrainingPair(actualChannel);
-            % 
+            %
             % % 4. 학습
             % [apjLossValue, apjTrainingInfo] = apj.Predictor.train();
-            % 
+            %
             % % 5. Oracle state = Target Beam의 실제 StateManager 그대로
             % oracleState = targetBeam.StateManager.getState();
-            % 
+            %
             % % 6. 다음 슬롯 label의 PendingState로 저장
             % apj.Predictor.setPendingState(oracleState);
-            % 
+            %
             % % 7. 다음 슬롯 채널 예측
             % if targetBeam.StateManager.isReady()
             %     [predictedChannel, ~] = apj.Predictor.predictChannel(oracleState);
             % else
             %     predictedChannel = [];
             % end
-            % 
+            %
             % apj.PredictedChannel = predictedChannel;
 
 
-            %% 4.5. APJ의 공격
-            if slotIndex > obj.ReconnaissanceDuration && ~isempty(apj.PredictedChannel)
-            
-                jammingChannel = previousPredictedChannel;
+            %% 4.5. APJ의 공격 (Top-2 채널 동시 재밍)
+            isAttackPhase = slotIndex > obj.ReconnaissanceDuration;
+            loggedJammingChannels = [];
+
+            if isAttackPhase && ~isempty(apj.PredictedChannel)
+
+                jammingChannels = unique(previousPredictedChannel, 'stable');  % 1x1 또는 1x2
+
                 % 안전성 검사
-                if ~isscalar(jammingChannel) || jammingChannel < 1 || jammingChannel > numel(ServiceChannels)
-                    error("TimeSlot:InvalidJammingChannel", "Invalid jamming channel at slot %d: %s", slotIndex, mat2str(jammingChannel));
+                if isempty(jammingChannels) || any(jammingChannels < 1) || any(jammingChannels > numel(ServiceChannels))
+                    error("TimeSlot:InvalidJammingChannel", "Invalid jamming channel at slot %d: %s", slotIndex, mat2str(jammingChannels));
                 end
-                apj.JammingChannel = jammingChannel;
-            
+
+                apj.JammingChannel = jammingChannels;
+
                 % Target UT를 서비스하는 Beam 검색
-            
                 targetBeamIndex = find([Satellite.Beams.AssociatedUTId] == apj.TargetUTId, 1);
-            
+
                 if isempty(targetBeamIndex)
                     error("TimeSlot:TargetBeamNotFound", "Target UT %d에 연결된 Beam을 찾을 수 없습니다.", apj.TargetUTId);
                 end
-            
+
                 targetBeamId = Satellite.Beams(targetBeamIndex).Id;
-            
-                jamPacket = Packet(PacketType.JAMMING, NodeType.APJ, apj.Id, ...
-                    NodeType.UT, apj.TargetUTId, targetBeamId, ChannelType.Service, jammingChannel);
-            
-                ServiceChannels(jammingChannel).addPacket(jamPacket);
-            
+
+                for jc = jammingChannels
+                    jamPacket = Packet(PacketType.JAMMING, NodeType.APJ, apj.Id, ...
+                        NodeType.UT, apj.TargetUTId, targetBeamId, ChannelType.Service, jc);
+
+                    ServiceChannels(jc).addPacket(jamPacket);
+                end
+
+                loggedJammingChannels = jammingChannels;
+            end
+
+            %% 4.6. BC 공격 로그 기록 (Top-1 단독 vs Top-2 비교용 — mainS의 sweepLog와 유사 포맷)
+            if isEavesdropSuccessful
+                if ~isempty(previousPredictedChannel)
+                    top1Channel = previousPredictedChannel(1);   % rank-1 예측 (Top-1 단독 hit 판정용)
+                else
+                    top1Channel = [];
+                end
+
+                bcLog(end+1) = struct( ...
+                    'slot', slotIndex, ...
+                    'observedChannel', observedChannel, ...
+                    'top1Channel', top1Channel, ...
+                    'jammingChannels', loggedJammingChannels, ...
+                    'isAttackPhase', isAttackPhase);
             end
 
             %% 5. UT의 HARQ 수행

@@ -1,205 +1,668 @@
 classdef TimeSlotD
     % TimeSlotD
     %
-    % DQN 재현성(Reproducibility) 테스트 전용 TimeSlot.
+    % ================================================================
+    % RF Observation + Oracle Action/Reward Shadow DQN + Attack Phase
+    % (Top-K Jamming 지원 버전 / 콘솔 출력 최소화 버전)
+    % ================================================================
     %
-    % - 환경(20개 Beam의 채널 경합, HARQ 등)은 기존 TimeSlot과 동일하게 진행시킨다.
-    % - Target Beam(실제로는 targetBeamIndex로 지정된 Beam)이 그 슬롯에서
-    %   completeTransition() 하기 직전에 만들어내는 진짜 transition
-    %   (state, occupancy, action, reward, nextState, nextOccupancy)을 그대로 캡처해서,
-    %   별도로 만든 Agent A / Agent B의 ReplayBuffer에 동일하게 주입하고 각자 학습시킨다.
-    % - Agent A/B는 환경(채널 선택)에는 전혀 관여하지 않는다 (순수 관찰자/학습기).
-    % - 매 슬롯 두 Agent의 Q-network를 같은 probe state로 비교해서
-    %   (cosine similarity, argmax 일치 여부, weight L2 diff) 발산 여부를 기록한다.
-    % - APJ 관련 로직(정찰/학습/공격)은 이 테스트 목적과 무관하므로 제외했다.
-    %   (APJ 객체 자체는 UT.performHARQ 인터페이스 유지를 위해 그대로 전달만 함 — 재밍은 발생하지 않음)
+    % [출력 정책]
+    %   - DebugHelper.printTargetVsShadowDQN(...) 딱 하나만 콘솔에 출력.
+    %   - 나머지 DebugHelper.print*(...) 호출과 fprintf 블록은 전부
+    %     주석 처리(기능은 그대로, 화면 출력만 억제).
+    %   - DebugHelper.record*(...)는 print가 아니라 데이터 적재용이라
+    %     콘솔에 안 찍히므로 그대로 유지.
 
     properties
-        % 슬롯 간 유지할 상태 없음
+        ReconnaissanceDuration
+        TopKJam   % 1 = Top-1만 재밍(기존 동작), 2 = Top-1+Top-2 동시 재밍(기본값)
     end
 
     methods
-        function obj = TimeSlotD()
+
+        function obj = TimeSlotD(topKJam)
+            env;
+            obj.ReconnaissanceDuration = reconnaissanceDuration;
+
+            if nargin < 1 || isempty(topKJam)
+                topKJam = 2;
+            end
+            obj.TopKJam = topKJam;
         end
 
-        function [divergenceLog, channelLog] = run(obj, slotIndex, UTs, Satellite, APJ, ServiceChannels, ControlChannels, AgentA, AgentB, targetBeamIndex, divergenceLog, channelLog)
-            DebugHelper.printTimeSlot(slotIndex);
 
-            %% 1. 채널 초기화
+        function [divergenceLog, channelLog] = run(obj, slotIndex, UTs, Satellite, apjd, ...
+                ServiceChannels, ControlChannels, targetBeamIndex, divergenceLog, channelLog)
+
+            %% 1. Time Slot Header
+            % DebugHelper.printTimeSlot(slotIndex);
+
+            %% 2. Channel 초기화
             obj.clearChannels(ServiceChannels, ControlChannels);
 
-            %% 2. Satellite beam의 채널 선택 (Action a_t 선택) + Transition 완성 + 학습
+            %% 3. Satellite Beam Action Selection
             currentSlotOccupancy = zeros(1, numel(ServiceChannels));
 
-            targetTransition = [];  % Target Beam의 이번 슬롯 완성 transition 캡처용
+            targetBeam = [];
+            targetAgent = [];
+            targetState = [];
+            targetOccupancy = [];
+            targetAction = [];
+
+            targetPrevState = [];
+            targetPrevOccupancy = [];
+            targetPrevAction = [];
+            targetPrevReward = [];
+            targetNextState = [];
+            targetNextOccupancy = [];
+
+            lossTarget = [];
 
             for beamIndex = 1:numel(Satellite.Beams)
+
                 beam = Satellite.Beams(beamIndex);
+
                 state = beam.StateManager.getState();
+
                 beam.StateManager.setCurrentOccupancy(currentSlotOccupancy);
                 occupancy = beam.StateManager.getCurrentOccupancy();
+
+                if beamIndex == targetBeamIndex
+                    targetBeam = beam;
+                    targetAgent = beam.Agent;
+
+                    targetPrevState = beam.Agent.PendingState;
+                    targetPrevOccupancy = beam.Agent.PendingOccupancy;
+                    targetPrevAction = beam.Agent.PendingAction;
+                    targetPrevReward = beam.Agent.PendingReward;
+
+                    targetNextState = state;
+                    targetNextOccupancy = occupancy;
+                end
 
                 beam.Agent.setCurrentState(state);
                 beam.Agent.setCurrentOccupancy(occupancy);
 
-                % Target Beam이면: completeTransition()이 Pending 필드를 비우기 전에
-                % 이번 슬롯에 실제로 완성되는 transition을 캡처해둔다.
-                if beamIndex == targetBeamIndex ...
-                        && ~isempty(beam.Agent.PendingState) ...
-                        && ~isempty(beam.Agent.PendingAction) ...
-                        && ~isempty(beam.Agent.PendingReward) ...
-                        && ~isempty(beam.Agent.CurrentState)
-                    targetTransition.state        = beam.Agent.PendingState;
-                    targetTransition.occupancy      = beam.Agent.PendingOccupancy;
-                    targetTransition.action         = beam.Agent.PendingAction;
-                    targetTransition.reward         = beam.Agent.PendingReward;
-                    targetTransition.nextState      = beam.Agent.CurrentState;
-                    targetTransition.nextOccupancy  = beam.Agent.CurrentOccupancy;
-                end
-
                 beam.Agent.completeTransition();
 
                 [lossValue, trainingInfo] = beam.Agent.train();
-                if beamIndex == 1
-                    DebugHelper.printAgentTraining(beam, lossValue, trainingInfo);
+
+                if beamIndex == targetBeamIndex
+                    lossTarget = lossValue;
+                    % DebugHelper.printAgentTraining(beam, lossValue, trainingInfo);
                 end
 
-                [selectedChannel, selectionMethod, randomValue, qValues] = beam.Agent.selectAction(state, occupancy);
+                [selectedChannel, selectionMethod, randomValue, qValues] = ...
+                    beam.Agent.selectAction(state, occupancy);
 
                 beam.SelectedChannel = selectedChannel;
-                currentSlotOccupancy(selectedChannel) = currentSlotOccupancy(selectedChannel) + 1;
+                currentSlotOccupancy(selectedChannel) = ...
+                    currentSlotOccupancy(selectedChannel) + 1;
 
-                % Target Beam의 채널 선택 / Epsilon / Q-value를 매 슬롯 기록 (collapse 시점 진단용)
                 if beamIndex == targetBeamIndex
+                    targetState = state;
+                    targetOccupancy = occupancy;
+                    targetAction = selectedChannel;
+
+                    % DebugHelper.printTargetActionSelection( ...
+                    %     slotIndex, beam, selectedChannel, ...
+                    %     selectionMethod, randomValue, qValues);
+
                     channelEntry.slot = slotIndex;
                     channelEntry.channel = selectedChannel;
-                    channelEntry.epsilon = beam.Agent.Epsilon;  % selectAction 내부에서 이미 decay된 이후 값
-                    channelEntry.method = selectionMethod;      % "Random" or "DQN"
+                    channelEntry.epsilon = beam.Agent.Epsilon;
+                    channelEntry.method = selectionMethod;
+
                     if isempty(qValues)
                         channelEntry.qValues = NaN(1, beam.Agent.NumActions);
                     else
                         channelEntry.qValues = qValues(:)';
                     end
+
                     channelLog(end + 1) = channelEntry; %#ok<AGROW>
                 end
             end
 
-            %% 2.5. Target Beam의 실제 transition을 Agent A / Agent B에 동일하게 주입 + 학습 + 비교
-            if ~isempty(targetTransition)
-                AgentA.ReplayBuffer.add(targetTransition.state, targetTransition.occupancy, ...
-                    targetTransition.action, targetTransition.reward, ...
-                    targetTransition.nextState, targetTransition.nextOccupancy);
-                AgentB.ReplayBuffer.add(targetTransition.state, targetTransition.occupancy, ...
-                    targetTransition.action, targetTransition.reward, ...
-                    targetTransition.nextState, targetTransition.nextOccupancy);
+            if isempty(targetAgent)
+                error( ...
+                    "TimeSlotD:TargetAgentNotFound", ...
+                    "Target Beam %d의 Agent를 찾지 못했습니다.", ...
+                    targetBeamIndex);
+            end
 
-                [lossA, ~] = AgentA.train();
-                [lossB, ~] = AgentB.train();
-                if isempty(lossA), lossA = NaN; end
-                if isempty(lossB), lossB = NaN; end
 
-                % 같은 probe state(이번 슬롯의 next state)로 두 Agent의 Q-vector 비교
-                probeState = targetTransition.nextState;
-                probeOccupancy = targetTransition.nextOccupancy;
+            %% 4. APJD Attack Decision (Top-K Jamming)
+            previousPredictedChannel = apjd.PredictedChannel;
+            previousPredictedQValues = apjd.PredictedQValues;
 
-                dlProbeState = AgentA.convertStateToDLArray(probeState);
-                dlProbeOccupancy = dlarray(single(reshape(probeOccupancy, [], 1)), "CB");
-
-                qA = extractdata(predict(AgentA.QNetwork, dlProbeState, dlProbeOccupancy));
-                qB = extractdata(predict(AgentB.QNetwork, dlProbeState, dlProbeOccupancy));
-
-                qCosSim = dot(qA(:), qB(:)) / (norm(qA(:)) * norm(qB(:)) + eps);
-                [~, argmaxA] = max(qA);
-                [~, argmaxB] = max(qB);
-                argmaxMatch = double(argmaxA == argmaxB);
-
-                weightDiffNorm = TimeSlotD.computeWeightDiffNorm(AgentA.QNetwork, AgentB.QNetwork);
-                weightNormA = TimeSlotD.computeNetworkNorm(AgentA.QNetwork);
-                weightNormB = TimeSlotD.computeNetworkNorm(AgentB.QNetwork);
-                qL2Dist = norm(qA(:) - qB(:));
-
-                entry.slot = slotIndex;
-                entry.lossA = lossA;
-                entry.lossB = lossB;
-                entry.qCosSim = qCosSim;
-                entry.argmaxMatch = argmaxMatch;
-                entry.weightDiffNorm = weightDiffNorm;
-                entry.weightNormA = weightNormA;
-                entry.weightNormB = weightNormB;
-                entry.qA = qA(:)';   % 채널별 Q-value 절대값 (Agent A)
-                entry.qB = qB(:)';   % 채널별 Q-value 절대값 (Agent B)
-                entry.qL2Dist = qL2Dist;
-                divergenceLog(end + 1) = entry; %#ok<AGROW>
-
-                if mod(slotIndex, 100) == 0
-                    fprintf("[Slot %d] lossA=%.4f lossB=%.4f cosSim=%.4f argmaxMatch=%d weightDiffNorm=%.4f\n", ...
-                        slotIndex, lossA, lossB, qCosSim, argmaxMatch, weightDiffNorm);
+            previousPredictedTop2Channel = [];
+            if obj.TopKJam >= 2 && ~isempty(previousPredictedQValues)
+                [~, rankedChannels] = sort(previousPredictedQValues(:), 'descend');
+                if numel(rankedChannels) >= 2
+                    previousPredictedTop2Channel = rankedChannels(2);
                 end
             end
 
-            %% 3. Satellite가 해당 채널로 DL 전송
-            dataPackets = cell(1, numel(Satellite.Beams));
-            for beamIndex = 1:numel(Satellite.Beams)
-                beam = Satellite.Beams(beamIndex);
-                selectedChannel = beam.SelectedChannel;
-                destinationUTId = beam.AssociatedUTId;
-                dataPackets{beamIndex} = Packet(PacketType.DATA, NodeType.Satellite, Satellite.Id, NodeType.UT, destinationUTId, beam.Id, ChannelType.Service, selectedChannel);
+            isAttackPhase = slotIndex > obj.ReconnaissanceDuration;
+            jammingChannels = [];
+
+            if isAttackPhase
+
+                if ~isempty(previousPredictedChannel)
+                    jammingChannels = previousPredictedChannel;
+
+                    if ~isempty(previousPredictedTop2Channel) && ...
+                            previousPredictedTop2Channel ~= previousPredictedChannel
+                        jammingChannels = [jammingChannels, previousPredictedTop2Channel]; %#ok<AGROW>
+                    end
+
+                    apjd.JammingChannel = jammingChannels(1);
+                else
+                    apjd.JammingChannel = [];
+                end
+
+            else
+                apjd.JammingChannel = [];
             end
+
+            if ~isempty(previousPredictedChannel)
+                DebugHelper.recordAPJPrediction( ...
+                    slotIndex, previousPredictedChannel, targetAction, numel(ServiceChannels));
+            end
+
+            % fprintf("\n");
+            % fprintf("============================================================\n");
+            % fprintf("APJD ATTACK STATUS - SLOT %d\n", slotIndex);
+            % fprintf("============================================================\n");
+            %
+            % if isAttackPhase
+            %     fprintf("  Phase                   : ATTACK\n");
+            %
+            %     if isempty(jammingChannels)
+            %         fprintf("  Predicted Channel(s)    : NONE\n");
+            %         fprintf("  Jamming Channel(s)      : NONE\n");
+            %     else
+            %         fprintf("  Predicted Channel(s)    : %s\n", mat2str(jammingChannels));
+            %         fprintf("  Jamming Channel(s)      : %s\n", mat2str(jammingChannels));
+            %         fprintf("  Target Actual Channel   : CH%d\n", targetAction);
+            %
+            %         if any(jammingChannels == targetAction)
+            %             fprintf("  Prediction / Attack Hit : YES\n");
+            %         else
+            %             fprintf("  Prediction / Attack Hit : NO\n");
+            %         end
+            %     end
+            %
+            % else
+            %     fprintf("  Phase                   : RECONNAISSANCE\n");
+            %     fprintf("  Jamming                 : NONE\n");
+            % end
+            %
+            % fprintf("============================================================\n");
+
+
+            %% 5. Satellite -> UT Downlink DATA 전송
+            dataPackets = cell(1, numel(Satellite.Beams));
+
+            for beamIndex = 1:numel(Satellite.Beams)
+
+                beam = Satellite.Beams(beamIndex);
+
+                dataPackets{beamIndex} = Packet( ...
+                    PacketType.DATA, ...
+                    NodeType.Satellite, ...
+                    Satellite.Id, ...
+                    NodeType.UT, ...
+                    beam.AssociatedUTId, ...
+                    beam.Id, ...
+                    ChannelType.Service, ...
+                    beam.SelectedChannel);
+            end
+
             for beamIndex = 1:numel(dataPackets)
                 packet = dataPackets{beamIndex};
-                selectedChannel = packet.ChannelId;
-                ServiceChannels(selectedChannel).addPacket(packet);
+                ServiceChannels(packet.ChannelId).addPacket(packet);
             end
 
-            %% 4. UT의 HARQ 수행 (APJ는 전달만 하고 이 테스트에서는 재밍을 걸지 않음)
+
+            %% 5.5. APJD 실제 재밍 패킷 주입 (Top-K 채널 전부)
+            if isAttackPhase && ~isempty(jammingChannels)
+
+                targetBeamId = Satellite.Beams(targetBeamIndex).Id;
+
+                for jammingChannel = jammingChannels
+
+                    jamPacket = Packet( ...
+                        PacketType.JAMMING, ...
+                        NodeType.APJ, ...
+                        apjd.Id, ...
+                        NodeType.UT, ...
+                        apjd.TargetUTId, ...
+                        targetBeamId, ...
+                        ChannelType.Service, ...
+                        jammingChannel);
+
+                    ServiceChannels(jammingChannel).addPacket(jamPacket);
+                end
+            end
+
+
+            %% 6. Target UT / APJD RF Observation
+            targetUT = UTs(apjd.TargetUTId);
+
+            targetUTRFObservation = ...
+                targetUT.ObservationManager.observe( ...
+                    ServiceChannels, Satellite);
+
+            apjdRFObservation = ...
+                apjd.ObservationManager.observe( ...
+                    ServiceChannels, Satellite);
+
+            % fprintf("\n");
+            % fprintf("============================================================\n");
+            % fprintf("RAW RF OBSERVATION VECTOR - SLOT %d\n", slotIndex);
+            % fprintf("============================================================\n");
+            %
+            % fprintf("  UT1 RF Observation       : %s\n", ...
+            %     mat2str(double(targetUTRFObservation(:))', 6));
+            %
+            % fprintf("  APJD RF Observation      : %s\n", ...
+            %     mat2str(double(apjdRFObservation(:))', 6));
+            %
+            % if isAttackPhase && ~isempty(jammingChannels)
+            %     fprintf("  APJD Jamming Channel(s)  : %s\n", mat2str(jammingChannels));
+            % else
+            %     fprintf("  APJD Jamming Channel(s)  : NONE\n");
+            % end
+            %
+            % fprintf("============================================================\n");
+
+            % DebugHelper.printRFObservationComparison( ...
+            %     slotIndex, ...
+            %     targetUT, ...
+            %     apjd, ...
+            %     targetUTRFObservation, ...
+            %     apjdRFObservation);
+
+
+            %% 7. APJD Shadow Agent
+            shadowAgent = apjd.Agent;
+
+            shadowState = apjd.StateManager.getState();
+
+            shadowOccupancy = targetOccupancy;
+
+            shadowAgent.setCurrentState(shadowState);
+            shadowAgent.setCurrentOccupancy(shadowOccupancy);
+
+
+            %% 7-1. RF State / Oracle component 비교
+            % if ~isempty(targetPrevState) && ...
+            %    ~isempty(shadowAgent.PendingState)
+            %
+            %     DebugHelper.printRFOracleTransitionCheck( ...
+            %         slotIndex, ...
+            %         targetPrevState, ...
+            %         targetPrevOccupancy, ...
+            %         targetPrevAction, ...
+            %         targetPrevReward, ...
+            %         targetNextState, ...
+            %         targetNextOccupancy, ...
+            %         shadowAgent.PendingState, ...
+            %         shadowAgent.PendingOccupancy, ...
+            %         shadowAgent.PendingAction, ...
+            %         shadowAgent.PendingReward, ...
+            %         shadowState, ...
+            %         shadowOccupancy);
+            % end
+
+
+            %% 7-2. Shadow 이전 Transition 완성
+            shadowAgent.completeTransition();
+
+
+            %% 7-3. Shadow DQN 학습
+            [lossShadow, trainingInfoShadow] = ...
+                shadowAgent.train();
+
+            % DebugHelper.printShadowTraining( ...
+            %     slotIndex, ...
+            %     shadowAgent, ...
+            %     shadowState, ...
+            %     shadowOccupancy, ...
+            %     lossShadow, ...
+            %     trainingInfoShadow);
+
+
+            %% 7-4. Target Actual Action Oracle 제공
+            shadowAgent.observeAction( ...
+                shadowState, ...
+                shadowOccupancy, ...
+                targetAction);
+
+            apjd.ObservedChannel = targetAction;
+
+
+            %% 7-5. Target / Shadow Q-vector 계산
+            dlTargetState = ...
+                targetAgent.convertStateToDLArray(targetState);
+
+            dlTargetOccupancy = ...
+                targetAgent.convertOccupancyToDLArray(targetOccupancy);
+
+            qTarget = extractdata( ...
+                predict( ...
+                    targetAgent.QNetwork, ...
+                    dlTargetState, ...
+                    dlTargetOccupancy));
+
+            qTarget = double(qTarget(:));
+
+
+            dlShadowState = ...
+                shadowAgent.convertStateToDLArray(shadowState);
+
+            dlShadowOccupancy = ...
+                shadowAgent.convertOccupancyToDLArray(shadowOccupancy);
+
+            qShadow = extractdata( ...
+                predict( ...
+                    shadowAgent.QNetwork, ...
+                    dlShadowState, ...
+                    dlShadowOccupancy));
+
+            qShadow = double(qShadow(:));
+
+
+            [~, greedyTarget] = max(qTarget);
+            [~, greedyShadow] = max(qShadow);
+
+            qCosSim = dot(qTarget, qShadow) / ...
+                (norm(qTarget) * norm(qShadow) + eps);
+
+            argmaxMatch = ...
+                double(greedyTarget == greedyShadow);
+
+            qL2Dist = ...
+                norm(qTarget - qShadow);
+
+            weightDiffNorm = ...
+                TimeSlotD.computeWeightDiffNorm( ...
+                    targetAgent.QNetwork, ...
+                    shadowAgent.QNetwork);
+
+            weightNormTarget = ...
+                TimeSlotD.computeNetworkNorm( ...
+                    targetAgent.QNetwork);
+
+            weightNormShadow = ...
+                TimeSlotD.computeNetworkNorm( ...
+                    shadowAgent.QNetwork);
+
+            % ---- 유일하게 콘솔에 남기는 출력 ----
+            DebugHelper.printTargetVsShadowDQN( ...
+                slotIndex, ...
+                targetAction, ...
+                qTarget, ...
+                qShadow, ...
+                greedyTarget, ...
+                greedyShadow, ...
+                qCosSim, ...
+                qL2Dist, ...
+                weightDiffNorm, ...
+                weightNormTarget, ...
+                weightNormShadow);
+
+
+            %% 7-6. Divergence Log
+            if isempty(lossTarget)
+                lossTargetLog = NaN;
+            else
+                lossTargetLog = lossTarget;
+            end
+
+            if isempty(lossShadow)
+                lossShadowLog = NaN;
+            else
+                lossShadowLog = lossShadow;
+            end
+
+            entry.slot = slotIndex;
+            entry.lossA = lossTargetLog;
+            entry.lossB = lossShadowLog;
+            entry.qCosSim = qCosSim;
+            entry.argmaxMatch = argmaxMatch;
+            entry.weightDiffNorm = weightDiffNorm;
+            entry.weightNormA = weightNormTarget;
+            entry.weightNormB = weightNormShadow;
+            entry.qA = qTarget(:)';
+            entry.qB = qShadow(:)';
+            entry.qL2Dist = qL2Dist;
+            entry.observedChannel = targetAction;
+            entry.actualACK = NaN;
+
+            entry.isAttackPhase = isAttackPhase;
+            entry.jammingChannels = jammingChannels;
+
+            divergenceLog(end + 1) = entry; %#ok<AGROW>
+
+
+            %% 8. UT HARQ 수행
             harqResults = cell(1, numel(UTs));
             sinrResults_dB = zeros(1, numel(UTs));
+            targetPacketType = [];
+            targetSINR_dB = [];
+
             for utIndex = 1:numel(UTs)
-                [packetType, SINR_dB] = UTs(utIndex).performHARQ(ServiceChannels, ControlChannels, Satellite, APJ);
+
+                [packetType, SINR_dB] = ...
+                    UTs(utIndex).performHARQ( ...
+                        ServiceChannels, ...
+                        ControlChannels, ...
+                        Satellite, ...
+                        apjd);
+
                 harqResults{utIndex} = packetType;
                 sinrResults_dB(utIndex) = SINR_dB;
+
+                if utIndex == apjd.TargetUTId
+                    targetPacketType = packetType;
+                    targetSINR_dB = SINR_dB;
+                end
             end
 
-            %% 5. Beam이 UT feedback 수신 및 reward 저장
-            actualACK = false(1, numel(Satellite.Beams));
+
+            %% 9. Beam Feedback 수신 / Target Reward
+            actualACK = ...
+                false(1, numel(Satellite.Beams));
+
             for beamIndex = 1:numel(Satellite.Beams)
+
                 beam = Satellite.Beams(beamIndex);
-                actualACK(beamIndex) = beam.receiveFeedback(ControlChannels, Satellite);
-                beam.Agent.setReward(actualACK(beamIndex));
+
+                actualACK(beamIndex) = ...
+                    beam.receiveFeedback( ...
+                        ControlChannels, ...
+                        Satellite);
+
+                beam.Agent.setReward( ...
+                    actualACK(beamIndex));
             end
+
+
+            %% 10. Shadow Reward = Oracle
+            targetOutcome = ...
+                actualACK(targetBeamIndex);
+
+            shadowAgent.setReward( ...
+                targetOutcome);
+
+            % DebugHelper.printRewardResult( ...
+            %     slotIndex, ...
+            %     targetAction, ...
+            %     targetPacketType, ...
+            %     targetOutcome, ...
+            %     targetAgent, ...
+            %     shadowAgent);
+
+            DebugHelper.recordTargetUTOutcome( ...
+                slotIndex, targetPacketType, targetSINR_dB, obj.ReconnaissanceDuration);
+
+
+            %% 11. APJD StateManager Update
+            if isempty(apjdRFObservation)
+
+                warning( ...
+                    "TimeSlotD:EmptyAPJDRFObservation", ...
+                    "Slot %d에서 APJD RF observation이 비어 있습니다.", ...
+                    slotIndex);
+
+            else
+
+                apjd.StateManager.update( ...
+                    apjdRFObservation, ...
+                    targetAction, ...
+                    targetPacketType);
+            end
+
+
+            %% 12. ACK Log
+            if ~isempty(divergenceLog) && ...
+               divergenceLog(end).slot == slotIndex
+
+                divergenceLog(end).actualACK = ...
+                    double(targetOutcome);
+            end
+
+
+            %% 13. NEXT-SLOT Shadow Prediction
+            nextShadowState = ...
+                apjd.StateManager.getState();
+
+            predictionOccupancy = ...
+                targetOccupancy;
+
+            [predictedAction, predictedQValues] = ...
+                shadowAgent.predictAction( ...
+                    nextShadowState, ...
+                    predictionOccupancy);
+
+            apjd.PredictedChannel = ...
+                predictedAction;
+
+            apjd.PredictedQValues = ...
+                predictedQValues;
+
+            % fprintf("\n");
+            % fprintf("============================================================\n");
+            % fprintf("APJD NEXT-SLOT PREDICTION - SLOT %d\n", slotIndex);
+            % fprintf("============================================================\n");
+            %
+            % fprintf("  Current Phase           : %s\n", ...
+            %     TimeSlotD.phaseToString(isAttackPhase));
+            %
+            % fprintf("  Prediction Target Slot  : %d\n", ...
+            %     slotIndex + 1);
+            %
+            % fprintf("  Predicted Channel (Top-1) : CH%d\n", ...
+            %     predictedAction);
+            %
+            % fprintf("============================================================\n");
         end
 
-        function clearChannels(obj, ServiceChannels, ControlChannels)
+
+        function clearChannels(~, ServiceChannels, ControlChannels)
+
             for channelIndex = 1:numel(ServiceChannels)
                 ServiceChannels(channelIndex).clearPacket();
             end
+
             for channelIndex = 1:numel(ControlChannels)
                 ControlChannels(channelIndex).clearPacket();
             end
         end
+
     end
+
 
     methods (Static)
+
         function normDiff = computeWeightDiffNorm(networkA, networkB)
-            % 두 dlnetwork의 Learnables(가중치) L2 거리 총합
+
             learnA = networkA.Learnables;
             learnB = networkB.Learnables;
-            normDiff = 0;
-            for i = 1:height(learnA)
-                valA = extractdata(learnA.Value{i});
-                valB = extractdata(learnB.Value{i});
-                normDiff = normDiff + norm(valA(:) - valB(:));
+
+            if height(learnA) ~= height(learnB)
+                error( ...
+                    "TimeSlotD:NetworkStructureMismatch", ...
+                    "Target과 Shadow Network 구조가 다릅니다.");
+            end
+
+            sumSquares = 0;
+
+            for learnableIndex = 1:height(learnA)
+
+                valueA = ...
+                    double( ...
+                        extractdata( ...
+                            learnA.Value{learnableIndex}));
+
+                valueB = ...
+                    double( ...
+                        extractdata( ...
+                            learnB.Value{learnableIndex}));
+
+                if ~isequal(size(valueA), size(valueB))
+                    error( ...
+                        "TimeSlotD:NetworkParameterSizeMismatch", ...
+                        "Target/Shadow parameter size가 다릅니다.");
+                end
+
+                difference = ...
+                    valueA(:) - valueB(:);
+
+                sumSquares = ...
+                    sumSquares + sum(difference .^ 2);
+            end
+
+            normDiff = ...
+                sqrt(sumSquares);
+        end
+
+
+        function normValue = computeNetworkNorm(network)
+
+            learnables = ...
+                network.Learnables;
+
+            sumSquares = 0;
+
+            for learnableIndex = 1:height(learnables)
+
+                value = ...
+                    double( ...
+                        extractdata( ...
+                            learnables.Value{learnableIndex}));
+
+                sumSquares = ...
+                    sumSquares + ...
+                    sum(value(:) .^ 2);
+            end
+
+            normValue = ...
+                sqrt(sumSquares);
+        end
+
+
+        function text = phaseToString(isAttackPhase)
+
+            if isAttackPhase
+                text = "ATTACK";
+            else
+                text = "RECONNAISSANCE";
             end
         end
 
-        function normVal = computeNetworkNorm(network)
-            % 하나의 dlnetwork Learnables(가중치) 전체 L2 norm
-            learn = network.Learnables;
-            normVal = 0;
-            for i = 1:height(learn)
-                val = extractdata(learn.Value{i});
-                normVal = normVal + norm(val(:));
-            end
-        end
     end
+
 end

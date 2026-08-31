@@ -632,5 +632,292 @@ classdef DebugHelper
             data = [];
         end
 
+
+        %% ========== Target Action Selection 출력 ==========
+        function printTargetActionSelection(slotIndex, beam, selectedChannel, selectionMethod, randomValue, qValues)
+            fprintf("\n============================================================\n");
+            fprintf("TARGET ACTION SELECTION - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Selection Method         : %s\n", string(selectionMethod));
+            fprintf("  Random Value             : %.8f\n", randomValue);
+            fprintf("  Selected Channel         : %d\n", selectedChannel);
+            fprintf("  Epsilon After Selection  : %.8f\n", beam.Agent.Epsilon);
+
+            if isempty(qValues)
+                fprintf("  Selection Q-values       : N/A (Random Action)\n");
+            else
+                qValuesDebug = double(qValues(:));
+                [~, greedyChannel] = max(qValuesDebug);
+                fprintf("\n  [Q-values used for Action Selection]\n");
+
+                for channelIndex = 1:numel(qValuesDebug)
+                    fprintf("    CH %2d : %+12.8f", channelIndex, qValuesDebug(channelIndex));
+
+                    if channelIndex == greedyChannel
+                        fprintf("  <-- Greedy");
+                    end
+                    if channelIndex == selectedChannel
+                        fprintf("  <-- Selected");
+                    end
+                    fprintf("\n");
+                end
+            end
+
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== Target UT vs APJD RF Observation 비교 ==========
+        function printRFObservationComparison(slotIndex, targetUT, apjd, targetObservation, apjdObservation)
+            targetPosition = double(targetUT.Position(:));
+            apjdPosition = double(apjd.Position(:));
+            distance_m = norm(targetPosition - apjdPosition);
+
+            fprintf("\n============================================================\n");
+            fprintf("TARGET UT vs APJD RF OBSERVATION - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Target UT ID             : %d\n", apjd.TargetUTId);
+
+            if numel(targetPosition) >= 3
+                fprintf("  Target UT Position       : (%+.3f, %+.3f, %+.3f) km\n", ...
+                    targetPosition(1)/1e3, targetPosition(2)/1e3, targetPosition(3)/1e3);
+            else
+                fprintf("  Target UT Position       : (%+.3f, %+.3f) km\n", ...
+                    targetPosition(1)/1e3, targetPosition(2)/1e3);
+            end
+
+            if numel(apjdPosition) >= 3
+                fprintf("  APJD Position            : (%+.3f, %+.3f, %+.3f) km\n", ...
+                    apjdPosition(1)/1e3, apjdPosition(2)/1e3, apjdPosition(3)/1e3);
+            else
+                fprintf("  APJD Position            : (%+.3f, %+.3f) km\n", ...
+                    apjdPosition(1)/1e3, apjdPosition(2)/1e3);
+            end
+
+            fprintf("  APJD - Target UT Dist.   : %.6f km\n", distance_m/1e3);
+
+            if isempty(targetObservation) || isempty(apjdObservation)
+                fprintf("\n  Observation              : EMPTY\n");
+                fprintf("============================================================\n");
+                return;
+            end
+
+            targetObservation = double(targetObservation(:));
+            apjdObservation = double(apjdObservation(:));
+
+            if numel(targetObservation) ~= numel(apjdObservation)
+                fprintf("\n  Observation Size Mismatch\n");
+                fprintf("    Target count           : %d\n", numel(targetObservation));
+                fprintf("    APJD count             : %d\n", numel(apjdObservation));
+                fprintf("============================================================\n");
+                return;
+            end
+
+            difference = targetObservation - apjdObservation;
+
+            fprintf("\n  [Channel-wise RF Observation]\n");
+            for channelIndex = 1:numel(targetObservation)
+                fprintf("    CH %2d | UT1=%+12.6f dBm | APJD=%+12.6f dBm | SignedDiff=%+9.4f dB | AbsDiff=%8.4f dB\n", ...
+                    channelIndex, targetObservation(channelIndex), apjdObservation(channelIndex), ...
+                    difference(channelIndex), abs(difference(channelIndex)));
+            end
+
+            fprintf("\n");
+            fprintf("  Target RF Min            : %.8f dBm\n", min(targetObservation));
+            fprintf("  Target RF Max            : %.8f dBm\n", max(targetObservation));
+            fprintf("  Target RF Mean           : %.8f dBm\n", mean(targetObservation));
+            fprintf("  APJD RF Min              : %.8f dBm\n", min(apjdObservation));
+            fprintf("  APJD RF Max              : %.8f dBm\n", max(apjdObservation));
+            fprintf("  APJD RF Mean             : %.8f dBm\n", mean(apjdObservation));
+            fprintf("  RF Observation L2 Diff  : %.8f\n", norm(difference));
+            fprintf("  RF Mean Absolute Diff    : %.8f dB\n", mean(abs(difference)));
+            fprintf("  RF Max Absolute Diff     : %.8f dB\n", max(abs(difference)));
+
+            if std(targetObservation) > 0 && std(apjdObservation) > 0
+                corrMatrix = corrcoef(targetObservation, apjdObservation);
+                rfCorrelation = corrMatrix(1, 2);
+            else
+                rfCorrelation = NaN;
+            end
+
+            fprintf("  RF Pearson Correlation   : %.8f\n", rfCorrelation);
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== RF Observation + Oracle Transition 비교 ==========
+        function printRFOracleTransitionCheck(slotIndex, targetPrevState, targetPrevOccupancy, ...
+                targetPrevAction, targetPrevReward, targetNextState, targetNextOccupancy, ...
+                shadowPrevState, shadowPrevOccupancy, shadowPrevAction, shadowPrevReward, ...
+                shadowNextState, shadowNextOccupancy)
+
+            previousStateDiff = norm(double(targetPrevState(:)) - double(shadowPrevState(:)));
+            previousOccupancyDiff = norm(double(targetPrevOccupancy(:)) - double(shadowPrevOccupancy(:)));
+            actionMatch = targetPrevAction == shadowPrevAction;
+            rewardMatch = targetPrevReward == shadowPrevReward;
+            nextStateDiff = norm(double(targetNextState(:)) - double(shadowNextState(:)));
+            nextOccupancyDiff = norm(double(targetNextOccupancy(:)) - double(shadowNextOccupancy(:)));
+
+            fprintf("\n============================================================\n");
+            fprintf("RF-OBSERVATION + ORACLE TRANSITION CHECK - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Previous State L2 Diff      : %.12f\n", previousStateDiff);
+            fprintf("  Previous Occupancy Diff     : %.12f\n", previousOccupancyDiff);
+            fprintf("  Previous Action Target      : %d\n", targetPrevAction);
+            fprintf("  Previous Action Shadow      : %d\n", shadowPrevAction);
+            fprintf("  Previous Action Match       : %s\n", DebugHelper.boolToString(actionMatch));
+            fprintf("  Previous Reward Target      : %.8f\n", targetPrevReward);
+            fprintf("  Previous Reward Shadow      : %.8f\n", shadowPrevReward);
+            fprintf("  Previous Reward Match       : %s\n", DebugHelper.boolToString(rewardMatch));
+            fprintf("  Next State L2 Diff          : %.12f\n", nextStateDiff);
+            fprintf("  Next Occupancy Diff         : %.12f\n", nextOccupancyDiff);
+
+            oracleComponentsMatch = previousOccupancyDiff == 0 && actionMatch && ...
+                rewardMatch && nextOccupancyDiff == 0;
+
+            fprintf("  Oracle Components Match     : %s\n", ...
+                DebugHelper.boolToString(oracleComponentsMatch));
+
+            if previousStateDiff > 0 || nextStateDiff > 0
+                fprintf("  RF State Difference         : PRESENT (EXPECTED)\n");
+            else
+                fprintf("  RF State Difference         : ZERO\n");
+            end
+
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== Shadow DQN Training 출력 ==========
+        function printShadowTraining(slotIndex, shadowAgent, state, occupancy, lossValue, trainingInfo)
+            fprintf("\n============================================================\n");
+            fprintf("APJD RF-SHADOW AGENT TRAINING - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Replay Buffer Count      : %d / %d\n", ...
+                shadowAgent.ReplayBuffer.Count, shadowAgent.ReplayBuffer.Capacity);
+            fprintf("  Batch Size               : %d\n", shadowAgent.BatchSize);
+            fprintf("  Training Step            : %d\n", shadowAgent.TrainingStep);
+            fprintf("  State Source             : APJD RF Observation\n");
+            fprintf("  Occupancy Source         : ORACLE\n");
+            fprintf("  Action Source            : ORACLE\n");
+            fprintf("  Reward Source            : ORACLE\n");
+
+            fprintf("\n  [Training]\n");
+            if isempty(lossValue)
+                fprintf("    Status                 : SKIPPED\n");
+                fprintf("    Reason                 : Replay Buffer not ready\n");
+            else
+                fprintf("    Status                 : EXECUTED\n");
+                fprintf("    Loss                   : %.8f\n", lossValue);
+                fprintf("    Mean Q-Value           : %.8f\n", trainingInfo.MeanQValue);
+                fprintf("    Max Q-Value            : %.8f\n", trainingInfo.MaxQValue);
+                fprintf("    Mean Target Q-Value    : %.8f\n", trainingInfo.MeanTargetQValue);
+            end
+
+            dlState = shadowAgent.convertStateToDLArray(state);
+            dlOccupancy = shadowAgent.convertOccupancyToDLArray(occupancy);
+            dlQValues = predict(shadowAgent.QNetwork, dlState, dlOccupancy);
+            qValues = double(extractdata(dlQValues));
+            qValues = qValues(:);
+            [maxQValue, greedyAction] = max(qValues);
+
+            fprintf("\n  [Current Shadow Q-Values]\n");
+            for channelIndex = 1:numel(qValues)
+                fprintf("    CH %2d : %+12.8f", channelIndex, qValues(channelIndex));
+                if channelIndex == greedyAction
+                    fprintf("  <-- Greedy");
+                end
+                fprintf("\n");
+            end
+
+            fprintf("\n");
+            fprintf("  Greedy Action            : CH%d\n", greedyAction);
+            fprintf("  Max Q                    : %.8f\n", maxQValue);
+            fprintf("  Q Range                  : %.8f\n", max(qValues) - min(qValues));
+            fprintf("  Q Std                    : %.8f\n", std(qValues));
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== Target vs Shadow Q 비교 ==========
+        function printTargetVsShadowDQN(slotIndex, targetAction, qTarget, qShadow, ...
+                greedyTarget, greedyShadow, qCosSim, qL2Dist, ...
+                weightDiffNorm, weightNormTarget, weightNormShadow)
+
+            fprintf("\n============================================================\n");
+            fprintf("TARGET vs RF-SHADOW DQN - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Shadow State Source      : APJD RF Observation\n");
+            fprintf("  Shadow Occupancy Source  : ORACLE\n");
+            fprintf("  Shadow Action Source     : ORACLE\n");
+            fprintf("  Shadow Reward Source     : ORACLE\n\n");
+            fprintf("  Target Actual Action     : CH%d\n", targetAction);
+            fprintf("  Target Greedy Action     : CH%d\n", greedyTarget);
+            fprintf("  Shadow Greedy Prediction : CH%d\n", greedyShadow);
+
+            fprintf("\n  [Q-value Comparison]\n");
+            for channelIndex = 1:numel(qTarget)
+                fprintf("    CH %2d | Target=%+11.7f | Shadow=%+11.7f | Diff=%10.7f", ...
+                    channelIndex, qTarget(channelIndex), qShadow(channelIndex), ...
+                    abs(qTarget(channelIndex) - qShadow(channelIndex)));
+
+                if channelIndex == greedyTarget
+                    fprintf("  <- TargetGreedy");
+                end
+                if channelIndex == greedyShadow
+                    fprintf("  <- ShadowGreedy");
+                end
+                fprintf("\n");
+            end
+
+            fprintf("\n");
+            fprintf("  Q Cosine Similarity      : %.8f\n", qCosSim);
+            fprintf("  Q L2 Distance            : %.8f\n", qL2Dist);
+            fprintf("  Argmax Match             : %d\n", double(greedyTarget == greedyShadow));
+            fprintf("  Weight Diff L2 Norm      : %.8f\n", weightDiffNorm);
+            fprintf("  Target Weight Norm       : %.8f\n", weightNormTarget);
+            fprintf("  Shadow Weight Norm       : %.8f\n", weightNormShadow);
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== Reward 결과 출력 ==========
+        function printRewardResult(slotIndex, targetAction, targetPacketType, targetOutcome, targetAgent, shadowAgent)
+            fprintf("\n============================================================\n");
+            fprintf("REWARD RESULT - SLOT %d\n", slotIndex);
+            fprintf("============================================================\n");
+            fprintf("  Target Channel           : CH%d\n", targetAction);
+            fprintf("  HARQ                     : %s\n", DebugHelper.packetTypeToString(targetPacketType));
+            fprintf("  Target Outcome           : %d\n", targetOutcome);
+            fprintf("  Reward Source            : ORACLE\n");
+            fprintf("  Target Pending Reward    : %.8f\n", targetAgent.PendingReward);
+            fprintf("  Shadow Pending Reward    : %.8f\n", shadowAgent.PendingReward);
+            fprintf("============================================================\n");
+        end
+
+
+        %% ========== Boolean -> String ==========
+        function text = boolToString(value)
+            if value
+                text = "YES";
+            else
+                text = "NO";
+            end
+        end
+
+
+        %% ========== PacketType -> String ==========
+        function text = packetTypeToString(packetType)
+            if isempty(packetType)
+                text = "NONE";
+            elseif packetType == PacketType.ACK
+                text = "ACK";
+            elseif packetType == PacketType.NACK
+                text = "NACK";
+            else
+                text = "UNKNOWN";
+            end
+        end
+
     end
 end

@@ -1,6 +1,6 @@
 %% ==================== Simulation Parameters ====================
 simulationSeed = 3;
-reconnaissanceDuration = 3000;
+reconnaissanceDuration = 1500;
 numTimeSlots =  3000;
 observationMode = ObservationMode.O;
 
@@ -70,8 +70,9 @@ sinrThreshold_dB = 12.5; % SINR Threshold
 
 
 %% ==================== APJ Parameters ====================
-targetJammerDistance = 10e3; %10km %Target UT - APJ Distance
-apjTxPower_dBm = 37; % APJ 전송 파워
+% targetJammerDistance = 1e3; %10km %Target UT - APJ Distance
+targetJammerDistance =1000;
+apjTxPower_dBm = 56; % APJ 전송 파워
 
 apjRxGain_dBi = 0;
 apjTxGain_dBi = 0;
@@ -105,19 +106,19 @@ beamRewardFunction = @(isACK) double(isACK) * beamSuccessReward + double(~isACK)
 
 
 %% ==================== APJ DRL Parameters ====================
-apjBatchSize = 128;
+apjBatchSize = 256;
 
 apjLearnRate = 0.001;
-apjDiscountFactor = 0.8;
+apjDiscountFactor = 0.9;
 
-apjReplayBufferCapacity = 500;
+apjReplayBufferCapacity = 5000;
 
 % Epsilon-greedy
 apjEpsilon = 0.0;
 apjEpsilonMin = 0.0;
 apjEpsilonDecay = 1.0;
 
-apjTargetUpdateFrequency = 100;
+apjTargetUpdateFrequency = 200;
 
 
 apjSuccessReward = 5;
@@ -133,3 +134,5 @@ apjTxPower_W = 10^((apjTxPower_dBm - 30) / 10); % Convert APJ transmit power fro
 
 % ===== Satellite coverage geometry =====
 rng(simulationSeed);
+
+% fprintf("apjLearnRate = %.6f\n", apjLearnRate);

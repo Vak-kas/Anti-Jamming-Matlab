@@ -77,17 +77,21 @@ classdef APJPredictor < handle
         end
 
 
-        % ========== 다음 채널 예측 (추론) ==========
-        function [predictedChannel, probabilities] = predictChannel(obj, state)
-
+        % ========== 다음 채널 예측 (추론, Top-K) ==========
+        function [predictedChannels, probabilities] = predictChannel(obj, state, topK)
+            if nargin < 3
+                topK = 1;
+            end
+        
             dlState = obj.convertStateToDLArray(state);
-
+        
             dlProbabilities = predict(obj.Network, dlState);
-
+        
             probabilities = extractdata(dlProbabilities);
             probabilities = probabilities(:);
-
-            [~, predictedChannel] = max(probabilities);
+        
+            [~, sortedIndices] = sort(probabilities, 'descend');
+            predictedChannels = sortedIndices(1:min(topK, numel(sortedIndices)))';
         end
 
 

@@ -67,6 +67,7 @@ classdef APJFactory
             position = candidatePosition;
 
         end
+       
 
     end
 end
